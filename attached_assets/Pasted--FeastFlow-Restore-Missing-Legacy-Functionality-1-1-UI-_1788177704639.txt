@@ -1,0 +1,591 @@
+# FeastFlow — Restore Missing Legacy Functionality & 1:1 UI Parity
+
+The audit has identified significant migration regressions.
+
+This is NOT a new migration.
+
+This is NOT a redesign.
+
+The goal is to restore the functionality and visual parity that was lost during the React migration.
+
+## ABSOLUTE RULES
+
+DO NOT modify:
+
+* Backend
+* Database
+* MongoDB models
+* Backend routes
+* Controllers
+* Services
+* Authentication backend
+* JWT implementation
+* RBAC backend
+* API contracts
+* Socket.IO server
+* Business logic
+
+Backend changes MUST remain:
+
+**0**
+
+Do not create new backend endpoints.
+
+Use the existing backend APIs and existing frontend behavior.
+
+Do not redesign the UI.
+
+Do not add new features.
+
+Do not improve existing UI.
+
+The original frontend is the source of truth.
+
+---
+
+# 1. RESTORE ALL IDENTIFIED FUNCTIONALITY
+
+Use the original HTML/JS implementation as the exact behavioral reference.
+
+Restore these missing React behaviors.
+
+## CUSTOMER
+
+### Cart
+
+Restore:
+
+* Remove cart item
+* Increase quantity
+* Decrease quantity
+* Correct cart total updates
+* Existing cart state behavior
+
+Use the same behavior and API/data structures as the legacy frontend.
+
+### Reorder
+
+Restore the complete existing quick reorder flow.
+
+Verify:
+
+* Existing customer identification
+* Existing reorder API
+* Existing item population
+* Existing cart behavior
+* Existing checkout flow
+
+### Reviews
+
+Restore:
+
+* Review form
+* Existing fields
+* Existing validation
+* Existing API call
+* Existing success/error handling
+
+Use:
+
+`POST /api/chat/review`
+
+Do not change the endpoint.
+
+### Reminder
+
+Restore the existing reminder behavior using:
+
+`POST /api/chat/reminder/trigger`
+
+Do not create another implementation.
+
+### Live Rider Tracking
+
+Restore the original customer Socket.IO behavior.
+
+When the existing rider location event arrives:
+
+* Update the existing rider marker
+* Preserve original map behavior
+* Preserve existing marker appearance
+* Preserve existing center/zoom behavior
+
+Do not redesign the map.
+
+---
+
+# 2. ADMIN FUNCTIONALITY
+
+Restore every missing existing behavior.
+
+## CRM
+
+Restore:
+
+* Customer points editing
+* Existing modal/form
+* Existing validation
+* Existing API request
+* Existing success/error behavior
+
+Use:
+
+`PUT /api/admin/customers/:customer_id/points`
+
+Do not change the API.
+
+## Branches
+
+Restore the existing:
+
+* Create
+* Edit
+* Delete
+
+behavior.
+
+Use the existing API:
+
+`POST /api/admin/branches`
+
+and the corresponding existing endpoints already used by the legacy frontend.
+
+Preserve the original modal design exactly.
+
+## Orders
+
+Restore:
+
+* Rider assignment
+* Existing assignment UI
+* Existing API request
+* Existing status behavior
+
+Use the existing backend endpoint already used by the legacy frontend.
+
+Do not create a new endpoint.
+
+## WhatsApp
+
+Restore the original WhatsApp inbox/handover UI and behavior.
+
+Use:
+
+`POST /api/admin/whatsapp/handover`
+
+Do not replace it with a generic CRM fallback.
+
+Preserve the original UI.
+
+## Reports
+
+Restore the existing authenticated CSV export.
+
+Use:
+
+`GET /api/admin/reports/export`
+
+The React frontend must:
+
+* Send existing authentication
+* Receive CSV
+* Trigger browser download
+* Preserve existing filename/behavior if present in legacy code
+
+Do NOT replace the export button with a notice.
+
+---
+
+# 3. KITCHEN
+
+Restore the original audio notification behavior.
+
+Inspect the legacy implementation of:
+
+`playKitchenAlertSound()`
+
+Restore it in React without changing:
+
+* Audio file
+* Trigger condition
+* Existing sound behavior
+
+When a new order event arrives through Socket.IO, reproduce the original behavior.
+
+Do not add new animations or notifications.
+
+---
+
+# 4. AUTHENTICATION / RBAC PARITY
+
+The audit found a migration regression in:
+
+`src/App.jsx`
+
+Compare the original role hierarchy with the React route guards.
+
+Restore the EXACT legacy access behavior.
+
+Important example:
+
+If the legacy implementation allowed:
+
+admin → manager
+admin → kitchen
+admin → delivery
+admin → rider
+
+then React must preserve that behavior.
+
+If manager was allowed to access kitchen/delivery views in the original implementation, preserve that too.
+
+Do not invent a new permission model.
+
+Do not weaken backend security.
+
+This is only restoration of the existing frontend routing behavior.
+
+---
+
+# 5. DO NOT CONSOLIDATE DISTINCT PORTALS VISUALLY
+
+The audit found that multiple original dashboards were consolidated into:
+
+`src/pages/Operations.jsx`
+
+This is acceptable ONLY if the rendered UI remains visually identical to each original portal.
+
+The original:
+
+* Admin Dashboard
+* Manager Dashboard
+* Kitchen Dashboard
+* Delivery Dashboard
+
+must retain their respective original:
+
+* Sidebar
+* Header
+* Cards
+* Tables
+* Navigation
+* Controls
+* Layout
+* Typography
+* Spacing
+* Colors
+* Portal identity
+
+You may keep shared React components internally.
+
+But each portal must render the same visual structure as the original.
+
+Do NOT redesign them into one generic dashboard.
+
+---
+
+# 6. CUSTOMER UI — HIGHEST PRIORITY
+
+The audit found significant visual differences.
+
+Compare:
+
+`public/index.html + public/js/customer.js + public/css/styles.css`
+
+against:
+
+`src/pages/Customer.jsx`
+
+Restore the original visual structure.
+
+Specifically verify:
+
+* Phone-style frame
+* Restaurant information card
+* Returning customer content
+* Reorder content
+* Header
+* Initial greeting
+* Chat message layout
+* Cards
+* Buttons
+* Input
+* Cart
+* Customization
+* Checkout
+* Tracking
+
+The React customer UI must reproduce the legacy customer UI.
+
+Do NOT modernize it.
+
+Do NOT simplify it.
+
+Do NOT change its copy.
+
+Do NOT introduce new styling.
+
+---
+
+# 7. ADMIN LOGIN VISUAL PARITY
+
+Compare:
+
+`public/admin-login.html`
+
+against the React admin login route.
+
+The React admin login must visually reproduce the original admin login.
+
+Do not use a generic shared login layout if that changes the appearance.
+
+Shared React components are fine internally, but the rendered result must match the original.
+
+---
+
+# 8. API PARITY AUDIT
+
+After restoring functionality, compare every legacy API call with React again.
+
+Specifically verify the previously identified missing APIs:
+
+* `GET /api/auth/verify`
+* `GET /api/chat/branches`
+* `GET /api/chat/reorder/:customer_id`
+* `POST /api/chat/review`
+* `POST /api/chat/reminder/trigger`
+* `POST /api/admin/branches`
+* `PUT /api/admin/customers/:customer_id/points`
+* `POST /api/admin/whatsapp/handover`
+* `GET /api/admin/reports/export`
+
+Also search the entire legacy JavaScript for any additional API calls that were missed.
+
+Do NOT assume the above list is complete.
+
+---
+
+# 9. SOCKET.IO PARITY
+
+Compare legacy Socket.IO code with React line by line.
+
+Verify:
+
+* Event names
+* Payload structures
+* Listeners
+* Cleanup
+* Reconnection
+* UI updates
+* Map updates
+* Audio alerts
+
+Do not change the Socket.IO server.
+
+---
+
+# 10. VISUAL PARITY
+
+After restoring functionality, perform actual old-vs-new screenshots.
+
+At minimum compare the same pages at:
+
+1280px
+1440px
+
+Compare:
+
+* Customer
+* Admin login
+* Admin dashboard
+* Manager dashboard
+* Kitchen dashboard
+* Delivery dashboard
+* Rider dashboard
+
+Do not give a visual parity score unless actual comparison was performed.
+
+The target is:
+
+**95%+ visual parity**
+
+A lower score must include exact differences.
+
+Do NOT make unrelated UI improvements.
+
+---
+
+# 11. RESPONSIVE VERIFICATION
+
+Now actually test:
+
+375px
+390px
+430px
+768px
+1024px
+1280px
+1440px
+
+Compare OLD vs NEW at each viewport.
+
+For each portal record:
+
+PASS
+FAIL
+PRE-EXISTING ISSUE
+
+If the issue exists in both old and new versions, classify it as:
+
+PRE-EXISTING ISSUE
+
+If it only exists in React, classify it as:
+
+MIGRATION REGRESSION
+
+Do not redesign responsive behavior.
+
+---
+
+# 12. LEGACY JAVASCRIPT COMPLETENESS CHECK
+
+Search every legacy JavaScript file.
+
+Do not only check the main modules.
+
+Look for:
+
+* Event listeners
+* onclick handlers
+* forms
+* modals
+* dropdowns
+* filters
+* searches
+* pagination
+* localStorage
+* sessionStorage
+* URL parameters
+* redirects
+* toast messages
+* alerts
+* error handling
+* API calls
+* Socket.IO
+* Leaflet
+* audio
+* downloads
+
+Create a checklist and confirm each has a React equivalent.
+
+---
+
+# 13. BUILD
+
+Run:
+
+npm run build
+
+It must pass.
+
+Also run the development workflow.
+
+---
+
+# 14. BACKEND PROTECTION
+
+Before and after changes run a Git diff.
+
+Confirm:
+
+Backend changes = 0
+
+Database changes = 0
+
+API contract changes = 0
+
+Socket.IO server changes = 0
+
+Authentication backend changes = 0
+
+If ANY backend file changes, revert it immediately.
+
+Do not modify backend files under any circumstances.
+
+---
+
+# 15. FINAL REPORT
+
+Provide a new report with:
+
+## Status
+
+PASS / PASS WITH ISSUES / FAIL
+
+## Restored Functionality
+
+List every issue from the previous audit and whether it was restored.
+
+## API Parity
+
+List every legacy API and whether React now uses it.
+
+## Socket.IO
+
+List every legacy event and React equivalent.
+
+## RBAC
+
+Show old role hierarchy vs React role hierarchy.
+
+## Visual Parity
+
+Provide actual score based on screenshots.
+
+## Responsive Matrix
+
+| Viewport | Customer | Admin | Manager | Kitchen | Delivery | Rider |
+| -------- | -------- | ----- | ------- | ------- | -------- | ----- |
+| 375px    |          |       |         |         |          |       |
+| 390px    |          |       |         |         |          |       |
+| 430px    |          |       |         |         |          |       |
+| 768px    |          |       |         |         |          |       |
+| 1024px   |          |       |         |         |          |       |
+| 1280px   |          |       |         |         |          |       |
+| 1440px   |          |       |         |         |          |       |
+
+## Backend Changes
+
+Must be:
+
+0
+
+## Database Changes
+
+Must be:
+
+0
+
+## Remaining Issues
+
+Separate:
+
+1. Migration regressions still remaining
+2. Pre-existing issues
+3. External-service limitations
+
+## IMPORTANT
+
+Do not claim PASS unless the functionality was actually tested.
+
+Do not claim visual parity without screenshot comparison.
+
+Do not claim responsive parity without testing the requested viewport sizes.
+
+Do not redesign anything.
+
+Do not add features.
+
+Do not modify backend/database/API contracts.
+
+The original frontend remains the source of truth.

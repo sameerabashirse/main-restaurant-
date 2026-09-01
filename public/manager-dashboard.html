@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FeastFlow Restaurant Manager Portal</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 antialiased flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-red-900 to-red-950 text-white py-3 px-4 shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-amber-400 text-red-950 flex items-center justify-center font-black text-sm shadow-sm">
+          <i class="fa-solid fa-user-tie"></i>
+        </div>
+        <div>
+          <h1 class="text-sm sm:text-base font-extrabold tracking-wide">FeastFlow Restaurant Manager Portal</h1>
+          <p class="text-[11px] text-amber-200/90 font-medium hidden sm:block">Store-Level Orders • Menu Availability • Customer CRM</p>
+        </div>
+      </div>
+      <button onclick="performStaffLogout()" class="bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/20 text-white px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs">
+        <i class="fa-solid fa-power-off text-xs"></i> Logout
+      </button>
+    </div>
+  </header>
+
+  <!-- Main SaaS Layout -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col md:flex-row gap-6">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-64 bg-slate-900 text-slate-200 rounded-3xl p-4 flex flex-col shadow-xl flex-shrink-0 border border-slate-800">
+      <div class="flex items-center gap-2.5 px-3 py-2 mb-3 border-b border-slate-800">
+        <div class="w-7 h-7 rounded bg-red-800 text-amber-300 flex items-center justify-center text-xs font-bold">
+          <i class="fa-solid fa-utensils"></i>
+        </div>
+        <span class="font-extrabold text-sm text-white tracking-wide">Manager Portal</span>
+      </div>
+
+      <div class="px-3 py-1.5 bg-slate-800/80 rounded-xl mb-4 text-[11px] text-slate-300 font-semibold border border-slate-700 flex items-center justify-between">
+        <span>Role</span>
+        <strong class="text-amber-400 uppercase text-[10px] tracking-wider">Store Manager</strong>
+      </div>
+
+      <nav class="space-y-1 flex-1">
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors bg-red-800 text-white" onclick="switchManagerTab('orders-tab')">
+          <i class="fa-solid fa-receipt w-4"></i> Orders Management
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchManagerTab('menu-tab')">
+          <i class="fa-solid fa-utensils w-4"></i> Menu Manager
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchManagerTab('crm-tab')">
+          <i class="fa-solid fa-users w-4"></i> Customer CRM
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchManagerTab('reports-tab')">
+          <i class="fa-solid fa-file-export w-4"></i> Reports Export
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content Area -->
+    <div class="flex-1 min-w-0 bg-white rounded-3xl p-6 shadow-sm border border-slate-200/90">
+      
+      <!-- Orders Tab -->
+      <div id="orders-tab" class="admin-tab-content space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Order Management</h2><p class="text-xs text-slate-500">Live order queue and rider assignments.</p></div>
+          <button onclick="loadAdminOrders()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-xl text-xs flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Order ID</th>
+                <th class="p-3">Customer</th>
+                <th class="p-3">Branch</th>
+                <th class="p-3">Items</th>
+                <th class="p-3">Total</th>
+                <th class="p-3">Payment</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Rider</th>
+                <th class="p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-orders-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Menu Tab -->
+      <div id="menu-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Menu Items</h2><p class="text-xs text-slate-500">View and add restaurant items.</p></div>
+          <button onclick="openAddMenuItemModal()" class="bg-red-800 hover:bg-red-900 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5"><i class="fa-solid fa-plus"></i> Add Item</button>
+        </div>
+        <div id="admin-menu-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- CRM Tab -->
+      <div id="crm-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Customer CRM Database</h2>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Customer ID</th>
+                <th class="p-3">Name & Phone</th>
+                <th class="p-3">Tier</th>
+                <th class="p-3">Orders</th>
+                <th class="p-3">Total Spent</th>
+                <th class="p-3">Loyalty Points</th>
+                <th class="p-3">Favorites</th>
+                <th class="p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-crm-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Reports Tab -->
+      <div id="reports-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Reports Export</h2>
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 max-w-md">
+          <h4 class="font-bold text-sm text-slate-900 mb-1 flex items-center gap-1.5"><i class="fa-solid fa-file-csv text-emerald-700"></i> Download CSV Sales Report</h4>
+          <p class="text-xs text-slate-500 mb-4">Export complete sales and order history in CSV format.</p>
+          <button onclick="exportCSVReport()" class="bg-emerald-700 hover:bg-emerald-800 text-white font-bold px-4 py-2.5 rounded-xl text-xs flex items-center gap-2">
+            <i class="fa-solid fa-download"></i> Export Sales CSV
+          </button>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Add Menu Item Modal -->
+  <div id="add-menu-item-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Add New Menu Item</h3>
+        <button onclick="closeModal('add-menu-item-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveNewMenuItem(event)" class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Item Name</label><input type="text" id="new-item-name" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+          <select id="new-item-cat" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs">
+            <option value="Pizza">Pizza</option>
+            <option value="Burgers">Burgers</option>
+            <option value="Pasta">Pasta</option>
+            <option value="Drinks">Drinks</option>
+            <option value="Sides">Sides</option>
+          </select>
+        </div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Price (Rs.)</label><input type="number" id="new-item-price" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Image URL</label><input type="url" id="new-item-image" value="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Description</label><textarea id="new-item-desc" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></textarea></div>
+        <button type="submit" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2.5 rounded-xl text-xs mt-2">Save Item</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/manager.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      enforceDashboardProtection('manager');
+      loadAdminOrders();
+    });
+  </script>
+</body>
+</html>

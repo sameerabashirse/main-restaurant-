@@ -1,0 +1,52 @@
+I want you to configure the GitHub authentication required for terminal Git operations and then push my current project to the already-configured GitHub repository.
+
+IMPORTANT: This is a Git authentication/push task ONLY.
+
+1. First inspect:
+
+   * Current Git branch
+   * Git status
+   * Current Git remote
+   * Current Git authentication status
+
+2. Configure/fix the required Replit account-level GitHub authentication for terminal Git operations using Replit's official supported authentication flow.
+
+3. The GitHub authorization has already been approved with “Always Allow”, so use that authorization if available. Do not ask me for another token unless it is genuinely required by Replit's official authentication flow.
+
+4. After authentication is configured, verify that terminal Git authentication works.
+
+5. Then push the existing current branch to the existing `origin` remote.
+
+6. The repository is:
+   `https://github.com/MuzammilMurtaza/Restaurant-App-V2`
+
+7. The current branch is expected to be:
+   `main`
+
+STRICT SAFETY RULES:
+
+* Do NOT modify source code.
+* Do NOT modify frontend/backend/database/configuration.
+* Do NOT create, delete, or rename project files.
+* Do NOT change the current branch.
+* Do NOT change the existing remote URL.
+* Do NOT reset or rebase.
+* Do NOT rewrite Git history.
+* Do NOT run migrations.
+* Do NOT perform an audit.
+* Do NOT make unrelated changes.
+* Preserve the existing project exactly as it is.
+
+If a commit is required because the existing local commits have not yet been pushed, you may push those EXISTING commits. Do NOT create a new commit just for the sake of this task.
+
+If authentication fails, troubleshoot and configure the Replit GitHub authentication at the account/provider level rather than modifying the project.
+
+After the push, verify the result and report:
+
+* Branch pushed
+* Remote used
+* Push successful or failed
+* Commit hash(es) pushed
+* Any authentication/configuration issue that remains
+
+Do not stop after configuring authentication. Complete the GitHub push if authentication succeeds.

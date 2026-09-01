@@ -1,0 +1,1044 @@
+# FeastFlow — Frontend Migration to React + Tailwind CSS ONLY
+
+I want to migrate the **complete FeastFlow frontend** from the current HTML/CSS/JavaScript architecture to:
+
+* React
+* Tailwind CSS
+
+This is a **frontend technology migration only**.
+
+## EXTREMELY IMPORTANT
+
+**DO NOT redesign the UI.**
+
+**DO NOT change the UI appearance.**
+
+**DO NOT change any functionality.**
+
+**DO NOT change the backend.**
+
+**DO NOT change the database.**
+
+**DO NOT change APIs.**
+
+**DO NOT change authentication or authorization.**
+
+**DO NOT change business logic.**
+
+The objective is to reproduce the existing frontend in React + Tailwind CSS as accurately as possible.
+
+Think of this as a:
+
+> **1:1 frontend migration, NOT a UI redesign.**
+
+---
+
+# 1. FIRST — FULL PROJECT ANALYSIS
+
+Before writing or modifying code, inspect the complete existing project.
+
+Understand:
+
+### Existing frontend
+
+Inspect:
+
+* All HTML pages
+* All CSS files
+* All JavaScript files
+* Existing frontend modules
+* Existing event handlers
+* Existing API calls
+* Existing authentication flow
+* Existing Socket.io client implementation
+* Existing Leaflet implementation
+* Existing modals
+* Existing forms
+* Existing tables
+* Existing dashboards
+* Existing navigation
+* Existing responsive behavior
+
+Also inspect:
+
+* package.json
+* backend API structure
+* authentication endpoints
+* Socket.io events
+* API response structures
+
+The backend must be treated as an existing system that the new React frontend must continue communicating with.
+
+---
+
+# 2. CURRENT PORTALS
+
+The complete frontend currently contains these portals/pages:
+
+### Customer
+
+* Customer WhatsApp-style Assistant
+* Menu
+* Food customization
+* Cart
+* Checkout
+* Order tracking
+* Review
+* Loyalty
+* Reorder
+
+### Super Admin
+
+* Admin Login
+* Admin Dashboard
+* Analytics
+* Orders
+* Customers/CRM
+* Menu
+* Branches
+* Riders
+* Reviews
+* Payments
+* Audit Logs
+* Settings
+
+### Restaurant Manager
+
+* Manager Dashboard
+* Orders
+* Menu
+* Customers
+* Riders
+* Operations
+
+### Kitchen
+
+* Kitchen Display System
+* Order queue
+* Order status transitions
+* Real-time updates
+* Audio alerts
+
+### Delivery Manager
+
+* Delivery Dashboard
+* Ready orders
+* Rider assignment
+* Rider status
+* Fleet map
+* Live location tracking
+
+### Rider
+
+* Rider Login
+* Rider Dashboard
+* Assigned orders
+* Customer information
+* Delivery status
+* GPS location
+
+All of these must be migrated to React.
+
+---
+
+# 3. REACT PROJECT ARCHITECTURE
+
+Create a proper React frontend architecture.
+
+Use a structure appropriate for the existing project, for example:
+
+```text
+frontend/
+├── src/
+│   ├── components/
+│   │   ├── common/
+│   │   ├── customer/
+│   │   ├── admin/
+│   │   ├── manager/
+│   │   ├── kitchen/
+│   │   ├── delivery/
+│   │   └── rider/
+│   │
+│   ├── pages/
+│   │   ├── customer/
+│   │   ├── admin/
+│   │   ├── manager/
+│   │   ├── kitchen/
+│   │   ├── delivery/
+│   │   └── rider/
+│   │
+│   ├── layouts/
+│   ├── hooks/
+│   ├── services/
+│   ├── context/
+│   ├── utils/
+│   ├── assets/
+│   ├── App.jsx
+│   └── main.jsx
+│
+├── public/
+├── package.json
+└── ...
+```
+
+You may modify the exact structure if another architecture is more appropriate, but keep the code modular and maintainable.
+
+---
+
+# 4. USE REACT PROPERLY
+
+Convert existing HTML pages into React components.
+
+Do NOT simply put the old HTML inside one giant React component.
+
+Break the UI into logical reusable components.
+
+For example:
+
+```text
+Sidebar
+Header
+KpiCard
+DataTable
+Modal
+Button
+Input
+StatusBadge
+EmptyState
+LoadingState
+```
+
+However:
+
+**Do not change how these components visually look.**
+
+They should reproduce the existing UI.
+
+---
+
+# 5. REACT ROUTING
+
+Use React Router if appropriate for the multi-portal architecture.
+
+Create routes corresponding to the existing application routes.
+
+For example:
+
+```text
+/
+ 
+/admin/login
+/admin/dashboard
+
+/staff/login
+
+/manager/dashboard
+
+/kitchen/dashboard
+
+/delivery/dashboard
+
+/rider/login
+
+/rider/dashboard
+```
+
+Preserve the existing URLs and routing behavior wherever reasonably possible.
+
+Do NOT break existing links or redirects.
+
+---
+
+# 6. TAILWIND CSS MIGRATION
+
+Replace the existing frontend styling system with Tailwind CSS.
+
+The goal is:
+
+```text
+Existing UI
+      ↓
+Same visual design
+      ↓
+Tailwind CSS implementation
+```
+
+Do NOT use Tailwind as an excuse to redesign the application.
+
+Preserve:
+
+* Colors
+* Typography
+* Font sizes
+* Font weights
+* Spacing
+* Padding
+* Margins
+* Borders
+* Border radius
+* Shadows
+* Icons
+* Button appearance
+* Card appearance
+* Table appearance
+* Modal appearance
+* Sidebar appearance
+* Header appearance
+* Navigation appearance
+* Responsive behavior
+
+Translate the existing CSS styling into equivalent Tailwind classes.
+
+---
+
+# 7. NO UI REDESIGN
+
+This is one of the most important requirements.
+
+DO NOT:
+
+* Change the color palette
+* Change layouts
+* Move major UI sections
+* Redesign dashboards
+* Change sidebar design
+* Change card designs
+* Change table designs
+* Change button designs
+* Change modal designs
+* Add new animations
+* Remove existing UI elements
+* Add new UI features
+* Change the customer WhatsApp-style interface
+* Change portal-specific visual identities
+
+The React/Tailwind version should visually look like the current version.
+
+If the current UI has something that appears imperfect, **do not fix it during this migration**.
+
+Preserve it exactly.
+
+UI improvements will be done in a separate task later.
+
+---
+
+# 8. DO NOT CHANGE FUNCTIONALITY
+
+Every existing functionality must continue working.
+
+Examples:
+
+### Customer
+
+* Start chat
+* Customer identification
+* Menu loading
+* Category selection
+* Food customization
+* Cart
+* Checkout
+* Order creation
+* Order tracking
+* Rider tracking
+* Reviews
+* Loyalty
+* Reorder
+
+### Admin
+
+* Login
+* Dashboard
+* Analytics
+* Orders
+* CRM
+* Menu
+* Branches
+* Riders
+* Reviews
+* Payments
+* Audit logs
+* Settings
+
+### Manager
+
+* Login
+* Dashboard
+* Orders
+* Menu
+* Customers
+* Riders
+
+### Kitchen
+
+* Order queue
+* Status transitions
+* Real-time order updates
+* Audio notifications
+
+### Delivery Manager
+
+* Ready orders
+* Rider assignment
+* Rider status
+* Live map
+* GPS tracking
+
+### Rider
+
+* Login
+* Assigned orders
+* Status updates
+* GPS broadcasting
+* Delivery completion
+
+Everything must behave the same way as before.
+
+---
+
+# 9. API INTEGRATION
+
+Create a centralized React API service.
+
+For example:
+
+```text
+src/services/api.js
+```
+
+It should communicate with the existing backend.
+
+Do NOT change backend API endpoints just to make React integration easier.
+
+Preserve:
+
+* HTTP methods
+* URLs
+* Request payloads
+* Response structures
+* Authorization headers
+* JWT handling
+
+The React frontend must adapt to the existing backend.
+
+---
+
+# 10. AUTHENTICATION
+
+Preserve the existing authentication system.
+
+Do NOT modify backend JWT implementation.
+
+React should correctly handle:
+
+```text
+Login
+ ↓
+JWT
+ ↓
+Authentication state
+ ↓
+Protected routes
+ ↓
+Dashboard
+```
+
+Implement React-side authentication state using an appropriate approach such as:
+
+* Context
+* Hooks
+* Protected Route component
+
+But do not change backend authentication behavior.
+
+---
+
+# 11. ROLE-BASED ACCESS
+
+Preserve the existing roles:
+
+```text
+admin
+manager
+kitchen
+delivery
+rider
+customer
+```
+
+React routing should respect the existing role permissions.
+
+Do not weaken backend authorization.
+
+Do not implement frontend-only security as a replacement for backend authorization.
+
+---
+
+# 12. SOCKET.IO
+
+Preserve the existing Socket.io functionality.
+
+Convert the existing Socket.io client logic into React hooks/services where appropriate.
+
+For example:
+
+```text
+useSocket()
+```
+
+or another clean architecture.
+
+Existing real-time functionality must continue working:
+
+### Kitchen
+
+New order → KDS updates automatically.
+
+### Delivery
+
+Rider location → map updates automatically.
+
+### Customer
+
+Delivery location/status → customer UI updates automatically.
+
+Do NOT modify the backend Socket.io implementation unless absolutely required for compatibility.
+
+---
+
+# 13. LEAFLET MAP
+
+Preserve the existing Leaflet functionality.
+
+Convert the existing map implementation into a reusable React component where appropriate.
+
+For example:
+
+```text
+DeliveryMap.jsx
+```
+
+The map should continue supporting:
+
+* Rider markers
+* Live location
+* Map updates
+* Existing zoom/location behavior
+
+Do not redesign the map.
+
+---
+
+# 14. MODALS
+
+Convert existing modals into React components.
+
+Examples:
+
+```text
+MenuItemModal
+BranchModal
+RiderModal
+CustomizationModal
+CategoryModal
+```
+
+Preserve:
+
+* Existing dimensions
+* Existing layout
+* Existing fields
+* Existing buttons
+* Existing behavior
+* Existing appearance
+
+Do not introduce new modal designs.
+
+---
+
+# 15. FORMS
+
+Convert existing forms into React-controlled or appropriately managed forms.
+
+Preserve:
+
+* Existing fields
+* Existing validation behavior
+* Existing submit behavior
+* Existing error handling
+* Existing appearance
+
+Do not change business rules.
+
+---
+
+# 16. TABLES
+
+Convert existing tables into reusable React components where appropriate.
+
+Preserve:
+
+* Columns
+* Data
+* Actions
+* Sorting behavior if currently present
+* Filtering if currently present
+* Pagination if currently present
+* Existing appearance
+
+Do not redesign tables.
+
+---
+
+# 17. CUSTOMER CHAT
+
+The customer interface is especially important.
+
+Preserve the existing:
+
+**WhatsApp-style UI**
+
+exactly.
+
+Convert:
+
+```text
+Chat UI
+Message list
+Input
+Cart
+Customization
+Checkout
+Tracking
+```
+
+into React components.
+
+Do not change its visual design.
+
+---
+
+# 18. RESPONSIVENESS
+
+IMPORTANT:
+
+For this migration, preserve the existing responsive behavior as much as possible.
+
+Do NOT introduce a new responsive redesign.
+
+However, while converting CSS to Tailwind, make sure the React version does not accidentally break responsiveness.
+
+Verify:
+
+```text
+375px
+390px
+430px
+768px
+1024px
+1280px
+1440px
+```
+
+The purpose is to ensure the migration itself does not introduce responsive regressions.
+
+If the existing UI has a responsive issue, record it for a future UI improvement task instead of redesigning it now.
+
+---
+
+# 19. ASSETS
+
+Preserve all existing assets.
+
+Inspect:
+
+* Images
+* Icons
+* Logos
+* Fonts
+* Audio
+* Map assets
+* Other static resources
+
+Move/reference them correctly in the React application.
+
+Do not replace assets unless necessary for React compatibility.
+
+Do not change their appearance.
+
+---
+
+# 20. REMOVE OLD FRONTEND ONLY AFTER VERIFICATION
+
+Do NOT immediately delete the old HTML/CSS/JS frontend.
+
+First:
+
+1. Build React frontend.
+2. Verify all routes.
+3. Verify functionality.
+4. Verify API integration.
+5. Verify authentication.
+6. Verify Socket.io.
+7. Verify Leaflet.
+8. Verify all portals.
+9. Compare old UI and React UI.
+
+Only after successful verification should obsolete frontend files be removed or archived.
+
+Do not delete anything that is still required by the backend.
+
+---
+
+# 21. BACKEND MUST REMAIN UNCHANGED
+
+For this migration, DO NOT modify:
+
+* MongoDB models
+* Backend routes
+* Controllers
+* Services
+* Authentication logic
+* JWT implementation
+* RBAC
+* Database configuration
+* Order business logic
+* Pricing logic
+* Delivery logic
+* Socket.io server logic
+
+The backend is considered **frozen** for this task.
+
+If you encounter a backend issue:
+
+**DO NOT fix it.**
+
+Report it separately in the final report.
+
+---
+
+# 22. DATABASE MUST REMAIN UNCHANGED
+
+Do not modify:
+
+* Schemas
+* Collections
+* Indexes
+* Counters
+* Data
+* Seed logic
+
+The React migration must work with the existing database architecture.
+
+---
+
+# 23. NO NEW BUSINESS FEATURES
+
+Do NOT add:
+
+* New AI features
+* New analytics
+* New dashboards
+* New filters
+* New notifications
+* New customer features
+* New delivery features
+* New admin features
+
+This task is strictly:
+
+**HTML/CSS/JS → React + Tailwind CSS**
+
+---
+
+# 24. NO UI IMPROVEMENTS
+
+Do not perform the previously identified UI polish tasks during this migration.
+
+Specifically do NOT change:
+
+* Mobile sidebar design
+* Modal accessibility improvements
+* Contrast improvements
+* Focus states
+* Table scroll indicators
+* Empty states
+* Skeleton loaders
+* KDS animations
+* Map height
+* Rider touch targets
+* Customer chat redesign
+
+Those will be handled later.
+
+For now:
+
+**Preserve the current UI exactly.**
+
+---
+
+# 25. DEPENDENCIES
+
+Use stable and necessary dependencies only.
+
+Likely dependencies may include:
+
+* React
+* React DOM
+* React Router
+* Tailwind CSS
+* Socket.io Client
+* Leaflet
+* React Leaflet if appropriate
+
+But inspect the existing project before adding anything.
+
+Do not install unnecessary packages.
+
+---
+
+# 26. ENVIRONMENT VARIABLES
+
+Create proper frontend environment configuration where needed.
+
+For example:
+
+```text
+VITE_API_URL
+```
+
+But do not expose secrets.
+
+Only frontend-safe configuration should be available to React.
+
+Do not move backend secrets into the frontend.
+
+---
+
+# 27. BUILD & DEVELOPMENT
+
+Configure the React frontend so that it can run cleanly in development.
+
+Example:
+
+```text
+npm install
+npm run dev
+```
+
+And production build:
+
+```text
+npm run build
+```
+
+The production build must complete without errors.
+
+---
+
+# 28. VERIFICATION
+
+After migration, verify every portal.
+
+### Customer
+
+* UI loads
+* Chat works
+* Menu works
+* Customization works
+* Cart works
+* Checkout works
+* Tracking works
+* Review works
+
+### Admin
+
+* Login works
+* Dashboard loads
+* Navigation works
+* Analytics works
+* Orders work
+* CRM works
+* Menu works
+* Branches work
+* Riders work
+* Reviews work
+* Payments work
+* Audit logs work
+* Settings work
+
+### Manager
+
+* Login works
+* Dashboard works
+* Orders work
+* Menu works
+* Customers work
+* Riders work
+
+### Kitchen
+
+* KDS loads
+* Orders appear
+* Status transitions work
+* Socket.io updates work
+* Audio notifications work
+
+### Delivery
+
+* Dashboard works
+* Orders load
+* Rider assignment works
+* Map loads
+* Live location works
+
+### Rider
+
+* Login works
+* Assigned orders load
+* Status updates work
+* GPS works
+* Delivery completion works
+
+---
+
+# 29. VISUAL COMPARISON
+
+This is extremely important.
+
+Compare the old frontend against the new React/Tailwind frontend.
+
+Check:
+
+* Same layout
+* Same spacing
+* Same colors
+* Same typography
+* Same components
+* Same buttons
+* Same tables
+* Same modals
+* Same navigation
+* Same customer chat
+* Same responsive behavior
+
+The goal is:
+
+```text
+OLD FRONTEND
+     ↓
+React + Tailwind
+     ↓
+VISUALLY IDENTICAL
+```
+
+Do not redesign anything.
+
+---
+
+# 30. FINAL REPORT
+
+After completing the migration, provide a detailed report:
+
+## React Migration
+
+* What was migrated
+* React architecture
+* Components created
+* Pages created
+* Routes created
+
+## Tailwind Migration
+
+* What CSS was converted
+* Tailwind configuration
+* Any remaining legacy CSS
+
+## Functionality
+
+Confirm which functionality was verified.
+
+## API Integration
+
+Confirm that existing APIs continue working without backend changes.
+
+## Authentication
+
+Confirm login/session/role behavior.
+
+## Socket.io
+
+Confirm real-time functionality.
+
+## Leaflet
+
+Confirm maps and live tracking.
+
+## Responsive Verification
+
+Provide results for:
+
+```text
+375px
+390px
+430px
+768px
+1024px
+1280px
+1440px
+```
+
+## Visual Parity
+
+Give a visual parity assessment:
+
+**0–100%**
+
+Explain any differences.
+
+## Files Changed
+
+List all important files created, modified, moved, or removed.
+
+## Backend Changes
+
+The expected result is:
+
+**0 backend changes.**
+
+If you changed anything in the backend, clearly explain why.
+
+## Remaining Issues
+
+List any problems that existed before migration and were intentionally left unchanged.
+
+---
+
+# CRITICAL FINAL REQUIREMENT
+
+This task is NOT a redesign.
+
+This task is NOT a feature development task.
+
+This task is NOT a backend refactoring task.
+
+This task is NOT a bug-fixing task.
+
+This task is ONLY:
+
+> **Convert the complete existing FeastFlow frontend from the current HTML/CSS/JavaScript architecture into React + Tailwind CSS while preserving the existing UI, functionality, API integration, authentication, real-time behavior, and responsive behavior.**
+
+Before making changes, inspect the entire project.
+
+Then migrate systematically.
+
+**Do not change the UI design.**
+
+**Do not change functionality.**
+
+**Do not change backend.**
+
+**Do not change database.**
+
+**Do not add features.**
+
+Only perform the React + Tailwind migration.

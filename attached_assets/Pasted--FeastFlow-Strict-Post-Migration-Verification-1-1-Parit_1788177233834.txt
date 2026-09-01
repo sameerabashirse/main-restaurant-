@@ -1,0 +1,589 @@
+# FeastFlow — Strict Post-Migration Verification & 1:1 Parity Audit
+
+The React + Tailwind migration has already been implemented.
+
+DO NOT perform another migration.
+
+DO NOT redesign anything.
+
+DO NOT improve the UI.
+
+DO NOT add features.
+
+DO NOT modify the backend.
+
+DO NOT modify the database.
+
+DO NOT modify APIs.
+
+DO NOT modify authentication logic.
+
+DO NOT modify business logic.
+
+Your task now is ONLY to perform a comprehensive verification and parity audit of the migrated React frontend against the original frontend.
+
+## 1. FIRST: COMPARE OLD VS NEW
+
+Inspect both:
+
+* Original HTML/CSS/JavaScript frontend
+* New React/Tailwind frontend
+
+Create a complete mapping:
+
+Original page → React page
+Original JS module → React component/hook/service
+Original CSS → Tailwind implementation
+Original API call → React API service
+Original Socket.IO logic → React Socket.IO implementation
+Original Leaflet logic → React map component
+
+Do not assume anything is equivalent just because the React page renders.
+
+Verify actual behavior.
+
+---
+
+# 2. VERIFY EVERY PORTAL
+
+## Customer
+
+Test all existing functionality:
+
+* Customer identification
+* Start chat
+* Chat messages
+* Menu loading
+* Categories
+* Food selection
+* Food customization
+* Add to cart
+* Remove from cart
+* Update quantity
+* Checkout
+* Order creation
+* Order confirmation
+* Order tracking
+* Rider tracking
+* Review submission
+* Loyalty
+* Reorder
+
+Verify API requests and payloads against the original implementation.
+
+---
+
+## Super Admin
+
+Verify:
+
+* Admin login
+* Dashboard
+* Analytics
+* Orders
+* Customers / CRM
+* Menu
+* Branches
+* Riders
+* Reviews
+* Payments
+* Audit logs
+* Settings
+
+Pay special attention to previously untested actions:
+
+* CRM point edits
+* Branch creation/edit/delete
+* WhatsApp handover
+* CSV export
+* Any authenticated admin actions
+* Modal forms
+* Filters
+* Search
+* Pagination
+* Table actions
+
+Do not skip "low-frequency" functionality.
+
+---
+
+## Restaurant Manager
+
+Verify:
+
+* Login
+* Dashboard
+* Orders
+* Menu
+* Customers
+* Riders
+* Operations
+* All existing CRUD actions
+* Filters/search
+* Modals/forms
+
+---
+
+## Kitchen
+
+Verify:
+
+* KDS loads
+* Existing order queue
+* Order details
+* Status transitions
+* Socket.IO connection
+* New order real-time updates
+* Existing audio alerts
+* Existing order refresh behavior
+
+Test actual Socket.IO events rather than only checking that the page renders.
+
+---
+
+## Delivery Manager
+
+Verify:
+
+* Dashboard
+* Ready orders
+* Rider assignment
+* Rider status
+* Fleet map
+* Rider markers
+* Live location updates
+* Socket.IO updates
+* Existing map behavior
+* Existing filters/actions
+
+---
+
+## Rider
+
+Verify:
+
+* Rider login
+* Dashboard
+* Assigned orders
+* Customer information
+* Delivery status
+* Status transitions
+* GPS location
+* Location broadcasting
+* Delivery completion
+
+---
+
+# 3. AUTHENTICATION / RBAC
+
+Verify the complete existing authentication flow.
+
+Test:
+
+* Login
+* Logout
+* JWT storage
+* Session restoration
+* Protected routes
+* Role detection
+* Role-based redirects
+* Unauthorized route handling
+* Expired/invalid token behavior
+
+Verify these roles:
+
+admin
+manager
+kitchen
+delivery
+rider
+customer
+
+Do NOT weaken backend authorization.
+
+Do NOT introduce frontend-only security as a replacement.
+
+---
+
+# 4. API PARITY
+
+Compare every API call in the original frontend with the React implementation.
+
+For every endpoint verify:
+
+* HTTP method
+* URL
+* Query parameters
+* Request body
+* Headers
+* Authorization
+* Response handling
+* Error handling
+
+The React frontend must adapt to the existing API.
+
+Do NOT modify backend endpoints to make React easier.
+
+Create a list of any API calls that were accidentally changed or lost.
+
+---
+
+# 5. SOCKET.IO PARITY
+
+Compare original Socket.IO client implementation against React.
+
+Verify:
+
+* Connection
+* Authentication
+* Event names
+* Event payloads
+* Listeners
+* Cleanup
+* Reconnection behavior
+* Real-time updates
+
+Verify:
+
+Customer:
+
+* delivery status/location updates
+
+Kitchen:
+
+* new order updates
+* order status updates
+
+Delivery:
+
+* rider location/status updates
+
+Rider:
+
+* location broadcasting/status updates
+
+Do not modify the backend Socket.IO server.
+
+---
+
+# 6. LEAFLET PARITY
+
+Compare the old Leaflet implementation with the React implementation.
+
+Verify:
+
+* Map initialization
+* Tile layer
+* Zoom
+* Center/location behavior
+* Rider markers
+* Marker updates
+* Live location
+* Existing map interactions
+
+Do not redesign the map.
+
+---
+
+# 7. VISUAL PARITY
+
+This is critical.
+
+Compare the original frontend and React frontend side by side.
+
+Verify:
+
+* Colors
+* Typography
+* Font sizes
+* Font weights
+* Spacing
+* Padding
+* Margins
+* Borders
+* Border radius
+* Shadows
+* Icons
+* Buttons
+* Cards
+* Tables
+* Modals
+* Sidebars
+* Headers
+* Navigation
+* Customer WhatsApp-style interface
+* Dashboards
+* Forms
+
+The goal is:
+
+OLD FRONTEND = NEW REACT FRONTEND
+
+Do not "improve" anything.
+
+If the old UI has an imperfection, preserve it and report it.
+
+---
+
+# 8. RESPONSIVE VERIFICATION
+
+Test the React frontend at exactly:
+
+375px
+390px
+430px
+768px
+1024px
+1280px
+1440px
+
+For each viewport verify every major portal/page.
+
+Check for migration regressions such as:
+
+* Overflow
+* Broken layouts
+* Missing elements
+* Incorrect widths
+* Incorrect heights
+* Broken sidebar
+* Broken modals
+* Broken tables
+* Broken forms
+* Broken customer chat
+* Broken maps
+
+IMPORTANT:
+
+If a responsive issue already existed in the original frontend, DO NOT fix it.
+
+Report:
+
+"Pre-existing issue — intentionally preserved."
+
+If the issue was introduced by React migration, fix only that regression.
+
+---
+
+# 9. ASSETS
+
+Verify that all original assets are still working:
+
+* Logos
+* Images
+* Icons
+* Fonts
+* Audio
+* Map assets
+* Static files
+
+Do not replace assets unnecessarily.
+
+---
+
+# 10. TAILWIND VERIFICATION
+
+Check whether the frontend is actually using Tailwind correctly.
+
+Identify:
+
+* Remaining legacy CSS
+* Unused CSS
+* Inline styles
+* Old stylesheet dependencies
+* CSS that can be removed safely
+
+Do NOT remove legacy CSS if it is still required for visual parity.
+
+The goal is migration, not aggressive cleanup.
+
+---
+
+# 11. FUNCTIONAL REGRESSION AUDIT
+
+Find any functionality that existed in the original frontend but is missing from React.
+
+Search the original JavaScript carefully for:
+
+* Event listeners
+* Click handlers
+* Form submissions
+* API calls
+* Modals
+* Dropdowns
+* Filters
+* Search
+* Pagination
+* Authentication
+* Socket events
+* Map interactions
+* Audio notifications
+* LocalStorage/sessionStorage
+* URL parameters
+* Redirects
+* Toasts/alerts
+* Error handling
+
+Every existing behavior must have an equivalent React implementation.
+
+---
+
+# 12. DO NOT MAKE UNRELATED CHANGES
+
+During this verification:
+
+DO NOT:
+
+* Redesign UI
+* Improve accessibility
+* Improve contrast
+* Add focus states
+* Add skeleton loaders
+* Add empty states
+* Add animations
+* Change mobile sidebar
+* Change modal design
+* Change table design
+* Change map height
+* Change rider touch targets
+* Add AI features
+* Add analytics
+* Refactor backend
+* Refactor database
+* Change APIs
+* Change business logic
+
+Only fix issues that are directly caused by the React migration.
+
+---
+
+# 13. BACKEND FREEZE
+
+Before finishing, verify Git diff.
+
+Expected result:
+
+Backend changes = 0
+
+Database changes = 0
+
+API contract changes = 0
+
+Authentication backend changes = 0
+
+Socket.IO server changes = 0
+
+If any backend file was modified, STOP and report it instead of silently changing it.
+
+---
+
+# 14. BUILD VERIFICATION
+
+Run:
+
+npm install
+
+npm run build
+
+Confirm:
+
+* No build errors
+* No JSX errors
+* No Tailwind errors
+* No missing imports
+* No broken assets
+* No routing errors
+
+Also verify the development workflow.
+
+---
+
+# 15. FINAL REPORT
+
+Do NOT simply say "migration complete."
+
+Provide a detailed audit report containing:
+
+## Migration Status
+
+PASS / PASS WITH ISSUES / FAIL
+
+## Pages Verified
+
+List every customer, admin, manager, kitchen, delivery, and rider page.
+
+## Functionality Verified
+
+List what was actually tested.
+
+## API Verification
+
+Number of API integrations checked.
+
+List any mismatches.
+
+## Authentication
+
+Report login/session/RBAC results.
+
+## Socket.IO
+
+Report each real-time feature verified.
+
+## Leaflet
+
+Report map/live tracking verification.
+
+## Responsive Verification
+
+Provide a table:
+
+| Viewport | Customer | Admin | Manager | Kitchen | Delivery | Rider |
+| -------- | -------- | ----- | ------- | ------- | -------- | ----- |
+| 375px    |          |       |         |         |          |       |
+| 390px    |          |       |         |         |          |       |
+| 430px    |          |       |         |         |          |       |
+| 768px    |          |       |         |         |          |       |
+| 1024px   |          |       |         |         |          |       |
+| 1280px   |          |       |         |         |          |       |
+| 1440px   |          |       |         |         |          |       |
+
+Use PASS / FAIL / PRE-EXISTING ISSUE.
+
+## Visual Parity
+
+Give a realistic score from 0–100%.
+
+Do not give 100% unless the comparison was actually performed.
+
+Explain every difference.
+
+## Backend Changes
+
+Expected:
+
+0
+
+## Database Changes
+
+Expected:
+
+0
+
+## Remaining Issues
+
+Separate:
+
+1. Migration regressions
+2. Pre-existing issues intentionally preserved
+3. Features that could not be tested because external credentials/services were unavailable
+
+## Important
+
+Do not claim something is verified unless you actually tested it.
+
+Do not use "should work" as verification.
+
+Do not skip low-frequency functionality.
+
+The objective is to determine whether the React/Tailwind frontend is genuinely a 1:1 migration of the original frontend.

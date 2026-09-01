@@ -1,0 +1,761 @@
+# FeastFlow — Restore React Frontend Code Into Existing Repository
+
+## OBJECTIVE
+
+The previous React/Tailwind restoration work has already been implemented and tested in the current Replit workspace.
+
+Your task now is ONLY to ensure that the completed React/Tailwind frontend implementation is properly present in the **existing FeastFlow repository/project structure**.
+
+This is a **code synchronization / integration task**, NOT a new migration, redesign, refactor, or feature-development task.
+
+The goal is:
+
+> Take the currently completed React/Tailwind implementation and make sure all of its required source files, components, pages, services, styles, assets, routing changes, and frontend restoration work are present correctly in the existing repository.
+
+---
+
+# ABSOLUTE RULES
+
+### DO NOT modify:
+
+* Backend code
+* Database code
+* MongoDB models
+* Backend routes
+* Controllers
+* Services
+* `server.js`
+* Authentication backend
+* JWT implementation
+* Backend RBAC
+* API contracts
+* Socket.IO server
+* Backend business logic
+
+### Backend must remain:
+
+**0 changes**
+
+Do NOT create:
+
+* new API endpoints
+* new backend routes
+* new controllers
+* new database fields
+* new models
+* new services
+
+Use the existing backend exactly as it is.
+
+---
+
+# IMPORTANT: EXISTING REPOSITORY IS THE TARGET
+
+Do NOT create a separate new project.
+
+Do NOT create a second React application.
+
+Do NOT create another `package.json`.
+
+Do NOT create another backend.
+
+Do NOT duplicate the application.
+
+The final result must remain a **single existing FeastFlow repository**.
+
+First inspect the current repository structure and determine:
+
+* existing React/Vite frontend location
+* existing backend location
+* existing `package.json`
+* existing `src/`
+* existing `public/`
+* existing configuration files
+* existing routes
+* existing Tailwind configuration
+* existing Vite configuration
+
+Then integrate the already-completed React implementation into that existing structure.
+
+---
+
+# 1. PRESERVE THE CURRENT IMPLEMENTATION
+
+The previous restoration work already implemented the following areas:
+
+### Customer
+
+* Cart item removal
+* Quantity increase/decrease
+* Cart totals
+* Reorder
+* Review submission
+* Reminder
+* Branch lookup
+* Live rider marker updates
+* Checkout
+* Legacy customer phone-style shell
+* Restaurant information card
+* Returning customer content
+* Reorder content
+* Legacy header
+* Legacy quick-action row
+* Legacy input area
+* Floating cart bar
+
+### Admin
+
+* CRM points editing
+* Branch creation
+* Branch editing
+* Branch deletion
+* Rider assignment
+* WhatsApp inbox
+* WhatsApp handover
+* Authenticated CSV export
+* Orders
+* Menu
+* Reviews
+* Payments
+* Audit logs
+* Settings
+
+### Kitchen
+
+* Legacy KDS styling
+* New order handling
+* Order status handling
+* Socket.IO updates
+* Legacy kitchen audio alert behavior
+
+### Authentication / Routing
+
+* Legacy `/api/auth/verify`
+* Existing JWT/session handling
+* Existing storage keys
+* Legacy role hierarchy
+* Protected routes
+* Role redirects
+
+### Socket.IO
+
+Existing events:
+
+* `order:created`
+* `order:updated`
+* `rider:location`
+* `whatsapp:notification`
+
+### Leaflet
+
+* Existing map initialization
+* Existing tile layer
+* Existing center/zoom behavior
+* Branch markers
+* Rider markers
+* Live rider marker movement
+
+---
+
+# 2. DO NOT REIMPLEMENT FROM SCRATCH
+
+Before changing anything:
+
+1. Inspect the current React implementation.
+2. Identify all files changed/created during the restoration work.
+3. Preserve those implementations.
+4. Only copy/move/synchronize code if something is missing from the target repository.
+5. Do not rewrite working components unnecessarily.
+
+If the implementation already exists correctly in the current repository, leave it unchanged.
+
+---
+
+# 3. FRONTEND FILES TO VERIFY
+
+Inspect and preserve the relevant React structure, including where applicable:
+
+```text
+src/
+├── App.jsx
+├── main.jsx
+├── styles.css
+├── pages/
+│   ├── Customer.jsx
+│   ├── Login.jsx
+│   ├── Operations.jsx
+│   └── Rider.jsx
+├── components/
+├── services/
+│   └── api.js
+└── utils/
+```
+
+The exact existing structure may differ.
+
+Do NOT force this structure if the repository already uses another valid structure.
+
+The important requirement is that the completed React implementation remains functional.
+
+---
+
+# 4. VERIFY RESTORED FRONTEND APIs
+
+Ensure the React frontend contains the existing implementations for:
+
+```text
+GET    /api/auth/verify
+GET    /api/chat/branches
+GET    /api/chat/reorder/:customer_id
+POST   /api/chat/review
+POST   /api/chat/reminder/trigger
+
+POST   /api/admin/branches
+PUT    /api/admin/customers/:customer_id/points
+POST   /api/admin/whatsapp/handover
+GET    /api/admin/reports/export
+```
+
+Also preserve every other API call already implemented in the React application.
+
+### IMPORTANT
+
+Do NOT change:
+
+* HTTP methods
+* endpoint paths
+* payload structures
+* authorization format
+* backend contracts
+
+The existing backend is the source of truth.
+
+---
+
+# 5. VERIFY CUSTOMER RESTORATION
+
+Ensure the current React Customer implementation contains the completed legacy behavior.
+
+Verify the source code includes:
+
+### Cart
+
+* Remove item
+* Increase quantity
+* Decrease quantity
+* Recalculate total
+
+### Reorder
+
+* Customer identification
+* Existing reorder API
+* Existing item population
+* Existing cart integration
+* Existing checkout integration
+
+### Reviews
+
+Use:
+
+```text
+POST /api/chat/review
+```
+
+Preserve the legacy fields and behavior.
+
+### Reminder
+
+Use:
+
+```text
+POST /api/chat/reminder/trigger
+```
+
+### Branch lookup
+
+Use:
+
+```text
+GET /api/chat/branches
+```
+
+### Live rider tracking
+
+Preserve the existing Leaflet marker and update it when the legacy rider location Socket.IO event is received.
+
+Do NOT rebuild the map on every location event.
+
+---
+
+# 6. VERIFY ADMIN RESTORATION
+
+Ensure the existing React admin implementation contains:
+
+### CRM
+
+```text
+PUT /api/admin/customers/:customer_id/points
+```
+
+### Branches
+
+Existing:
+
+* create
+* edit
+* delete
+
+Do not invent endpoints.
+
+### Orders
+
+Existing rider assignment behavior.
+
+### WhatsApp
+
+Existing inbox and handover UI.
+
+Handover must use:
+
+```text
+POST /api/admin/whatsapp/handover
+```
+
+### Reports
+
+Existing authenticated CSV download:
+
+```text
+GET /api/admin/reports/export
+```
+
+The browser should download the CSV using the existing legacy behavior.
+
+Do NOT replace it with a placeholder message.
+
+---
+
+# 7. VERIFY KITCHEN AUDIO
+
+Preserve the implementation based on the original:
+
+```text
+playKitchenAlertSound()
+```
+
+The audio must only be triggered under the same condition as the legacy implementation.
+
+Do NOT:
+
+* change the audio file
+* add a new sound
+* add animations
+* add notifications
+* change the trigger condition
+
+---
+
+# 8. VERIFY RBAC ROUTING
+
+Preserve the exact role hierarchy from the legacy frontend.
+
+Do NOT invent permissions.
+
+Do NOT change backend authorization.
+
+Compare the existing legacy routing logic with the React `Protected` routing behavior.
+
+The React frontend must preserve the existing legacy role access behavior.
+
+---
+
+# 9. PRESERVE PORTAL-SPECIFIC UI
+
+Do NOT turn all portals into a generic redesigned dashboard.
+
+The following must retain their existing legacy identity:
+
+* Admin
+* Manager
+* Kitchen
+* Delivery
+* Rider
+* Customer
+
+Shared React components are allowed internally.
+
+However, rendered UI must preserve the existing legacy structure.
+
+Do NOT redesign:
+
+* sidebar
+* header
+* cards
+* tables
+* modals
+* forms
+* navigation
+* colors
+* typography
+* spacing
+* buttons
+* map
+* customer chat
+
+---
+
+# 10. CUSTOMER UI MUST REMAIN LEGACY-ALIGNED
+
+Preserve the restored customer structure:
+
+* 410px phone-style frame
+* notch
+* legacy header
+* restaurant information card
+* returning-customer card
+* reorder section
+* quick actions
+* chat body
+* input row
+* floating cart bar
+* checkout
+* tracking
+
+Do NOT modernize or simplify it.
+
+Do NOT introduce a new visual style.
+
+---
+
+# 11. ADMIN LOGIN
+
+Preserve the restored legacy admin login appearance.
+
+Do NOT replace it with a generic login design.
+
+The React admin login must continue using the existing restored implementation.
+
+---
+
+# 12. SOCKET.IO
+
+Preserve the existing React Socket.IO implementation.
+
+Do NOT modify the backend Socket.IO server.
+
+Ensure these event names remain unchanged:
+
+```text
+order:created
+order:updated
+rider:location
+whatsapp:notification
+```
+
+Preserve:
+
+* connection
+* authentication
+* listeners
+* cleanup
+* reconnection
+* payload handling
+* UI updates
+* map updates
+* kitchen audio behavior
+
+Do not rewrite the implementation unless something is actually broken.
+
+---
+
+# 13. LEAFLET
+
+Preserve the existing React Leaflet implementation.
+
+Do NOT redesign the map.
+
+Do NOT change:
+
+* tile provider
+* marker appearance
+* zoom behavior
+* center behavior
+* existing interactions
+
+Ensure live rider location updates move the existing marker instead of rebuilding the entire map.
+
+---
+
+# 14. ASSETS
+
+Ensure all required frontend assets remain available:
+
+* logos
+* images
+* icons
+* fonts
+* audio
+* Leaflet assets
+* favicon
+
+Do NOT replace assets unnecessarily.
+
+Do NOT remove assets that the legacy frontend still requires.
+
+---
+
+# 15. TAILWIND
+
+Preserve the existing Tailwind implementation.
+
+Do NOT perform another migration.
+
+Do NOT upgrade Tailwind merely for cleanup.
+
+Do NOT remove legacy CSS if it is still required for visual parity.
+
+The React entrypoint should continue using the existing local Tailwind setup.
+
+Do NOT introduce the Tailwind CDN into the React application.
+
+---
+
+# 16. DEPENDENCIES
+
+Inspect the existing `package.json`.
+
+Do NOT create a new package.json.
+
+Only ensure dependencies required by the already-existing React implementation are available.
+
+Do NOT upgrade unrelated packages.
+
+Do NOT change backend dependencies.
+
+Do NOT install unnecessary packages.
+
+---
+
+# 17. ROUTES
+
+Preserve the existing React routes:
+
+```text
+/
+/admin/login
+/staff/login
+/staff/manager/dashboard
+/staff/kitchen/dashboard
+/staff/delivery/dashboard
+/rider/login
+/rider/dashboard
+```
+
+Also preserve any additional existing React routes.
+
+Do NOT remove legacy routes.
+
+---
+
+# 18. BACKEND PROTECTION — CRITICAL
+
+Before making any changes:
+
+Run:
+
+```bash
+git status
+git diff --stat
+```
+
+Identify backend files.
+
+After integration:
+
+Run:
+
+```bash
+git status
+git diff --stat
+git diff
+```
+
+Confirm that no backend files were changed.
+
+Backend changes MUST remain:
+
+```text
+0
+```
+
+Database changes:
+
+```text
+0
+```
+
+API contract changes:
+
+```text
+0
+```
+
+Socket.IO server changes:
+
+```text
+0
+```
+
+Authentication backend changes:
+
+```text
+0
+```
+
+Business logic changes:
+
+```text
+0
+```
+
+If any backend file becomes modified because of this task:
+
+STOP.
+
+Do not silently modify or rewrite the backend.
+
+Report the file and revert only the accidental backend modification if it was caused by this integration task.
+
+---
+
+# 19. DO NOT DELETE LEGACY SOURCE
+
+Do NOT delete:
+
+```text
+public/index.html
+public/js/*
+public/css/*
+```
+
+unless the current repository structure already intentionally stores those files elsewhere.
+
+The legacy frontend remains the source of truth for parity.
+
+---
+
+# 20. BUILD VERIFICATION
+
+After ensuring the implementation is correctly present, run:
+
+```bash
+npm install
+npm run build
+```
+
+The build must succeed.
+
+Do NOT fix unrelated warnings.
+
+Do NOT modify backend code to make the frontend build.
+
+If the build fails because of an actual React/frontend integration issue, fix only that frontend issue.
+
+If the build fails because of backend code, STOP and report it.
+
+---
+
+# 21. DEVELOPMENT WORKFLOW
+
+Verify:
+
+```bash
+npm run dev
+```
+
+Ensure the existing development workflow still works.
+
+Do not create a second server architecture.
+
+Preserve the existing frontend/backend proxy configuration.
+
+---
+
+# 22. FINAL RESPONSE
+
+After completing the integration, DO NOT perform the final parity audit yet.
+
+Do NOT provide a visual parity score.
+
+Do NOT claim 1:1 parity.
+
+Do NOT claim responsive parity.
+
+Do NOT claim Socket.IO end-to-end verification unless actually performed.
+
+Simply report:
+
+### Integration Status
+
+PASS / PASS WITH ISSUES / FAIL
+
+### Frontend Files Synchronized
+
+List the files that were actually copied, restored, or synchronized.
+
+### Existing Files Preserved
+
+List important existing files that were intentionally left unchanged.
+
+### Backend Protection
+
+```text
+Backend changes: 0
+Database changes: 0
+API contract changes: 0
+Socket.IO server changes: 0
+Authentication backend changes: 0
+Business logic changes: 0
+```
+
+### Build
+
+```text
+npm run build: PASS/FAIL
+```
+
+### Development Workflow
+
+```text
+npm run dev: PASS/FAIL
+```
+
+### Remaining Limitations
+
+Only mention genuine integration limitations.
+
+Do NOT perform the final audit in this task.
+
+---
+
+# FINAL INSTRUCTION
+
+This task exists only to ensure the already-restored React/Tailwind implementation is correctly present inside the existing FeastFlow repository.
+
+The next step AFTER this task will be a separate:
+
+**FINAL Post-Restoration Audit ONLY**
+
+Do not perform that audit now.
+
+Do not modify backend.
+
+Do not redesign.
+
+Do not migrate again.
+
+Do not add features.
+
+Do not change business logic.
+
+Use the existing legacy frontend as the behavioral and visual source of truth.

@@ -1,0 +1,223 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FeastFlow Restaurant | AI Food Ordering Assistant</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+
+  <!-- Leaflet CSS for Live Maps -->
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <script>
+    tailwind.config = {
+      theme: {
+        extend: {
+          colors: {
+            brand: {
+              red: '#8B0000',
+              redDark: '#500000',
+              gold: '#FFB000',
+              cream: '#FFF8F0'
+            },
+            wa: {
+              header: '#075E54',
+              chatBg: '#EFEAE2',
+              inbound: '#FFFFFF',
+              outbound: '#DCF8C6',
+              green: '#25D366',
+              teal: '#00A884'
+            }
+          }
+        }
+      }
+    }
+  </script>
+
+  <!-- App Styles -->
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="bg-slate-100 min-h-screen flex flex-col items-center justify-between text-slate-800 antialiased">
+
+  <!-- Top System Header -->
+  <header class="w-full bg-gradient-to-r from-red-900 via-red-950 to-red-900 text-white py-2.5 px-4 shadow-md sticky top-0 z-40">
+    <div class="max-w-6xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-9 h-9 rounded-full bg-amber-400 text-red-950 flex items-center justify-center font-extrabold text-base shadow-sm">
+          <i class="fa-solid fa-utensils"></i>
+        </div>
+        <div>
+          <h1 class="text-sm sm:text-base font-extrabold leading-tight tracking-wide">FeastFlow Restaurant</h1>
+          <p class="text-[11px] text-amber-200/90 font-medium hidden sm:block">Smart AI Food Ordering & Customization</p>
+        </div>
+      </div>
+      <div class="flex items-center gap-2">
+        <a href="/staff/login" target="_blank" class="bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/20 text-white px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs">
+          <i class="fa-solid fa-lock text-[10px]"></i> Staff Operations
+        </a>
+      </div>
+    </div>
+  </header>
+
+  <!-- Main Mobile Frame Wrapper -->
+  <main class="flex-1 w-full max-w-6xl flex items-center justify-center p-0 sm:py-6 sm:px-4">
+    
+    <!-- REALISTIC MOBILE DEVICE FRAME -->
+    <div class="w-full sm:w-[410px] h-[100dvh] sm:h-[840px] bg-white sm:rounded-[40px] sm:shadow-2xl sm:ring-12 sm:ring-slate-900 overflow-hidden flex flex-col relative border border-slate-200 sm:border-slate-800">
+      
+      <!-- Top Speaker Notch (Hidden on true mobile) -->
+      <div class="hidden sm:flex bg-[#075E54] h-6 w-full justify-center items-center relative z-20">
+        <div class="w-28 h-4 bg-black rounded-b-xl"></div>
+      </div>
+
+      <!-- WhatsApp Header -->
+      <div class="bg-[#075E54] text-white px-3.5 py-2.5 flex items-center justify-between gap-2.5 shadow-sm z-10 flex-shrink-0">
+        <div class="flex items-center gap-2.5 min-w-0">
+          <div class="relative w-10 h-10 rounded-full bg-emerald-800 flex items-center justify-center text-white text-lg flex-shrink-0 shadow-inner">
+            <i class="fa-solid fa-utensils"></i>
+            <span class="absolute bottom-0 right-0 w-3 h-3 bg-[#25D366] border-2 border-[#075E54] rounded-full"></span>
+          </div>
+          <div class="min-w-0">
+            <div class="flex items-center gap-1.5">
+              <h2 class="text-sm font-bold truncate">FeastFlow Restaurant</h2>
+              <i class="fa-solid fa-circle-check text-[#25D366] text-xs"></i>
+            </div>
+            <p id="wa-status-text" class="text-[11px] text-emerald-200 truncate font-medium">🟢 Online • AI Assistant</p>
+          </div>
+        </div>
+        <div class="flex items-center gap-1">
+          <button onclick="resetWhatsAppChat()" class="p-2 rounded-full hover:bg-white/10 text-white/90 hover:text-white transition-colors" title="Restart Chat">
+            <i class="fa-solid fa-rotate-right text-xs"></i>
+          </button>
+        </div>
+      </div>
+
+      <!-- Chat Conversation Messages Body -->
+      <div id="wa-chat-body" class="flex-1 overflow-y-auto p-3.5 space-y-2.5 wa-chat-texture flex flex-col scroll-smooth">
+        <!-- Inbound / Outbound Messages Appended Dynamically -->
+      </div>
+
+      <!-- Quick Action Floating Pills Bar -->
+      <div class="flex items-center gap-1.5 px-2.5 py-2 bg-slate-100 border-t border-slate-200/90 overflow-x-auto flex-shrink-0 no-scrollbar">
+        <button class="bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#075E54] border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap shadow-2xs transition-colors flex items-center gap-1" onclick="showWhatsAppCategoryList()">
+          🍕 Menu
+        </button>
+        <button class="bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#075E54] border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap shadow-2xs transition-colors flex items-center gap-1" onclick="triggerWACheckout()">
+          🛒 Cart
+        </button>
+        <button class="bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#075E54] border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap shadow-2xs transition-colors flex items-center gap-1" onclick="showWhatsAppLocationMessage()">
+          📍 Location
+        </button>
+        <button class="bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#075E54] border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap shadow-2xs transition-colors flex items-center gap-1" onclick="promptWATrackOrder()">
+          📦 Track
+        </button>
+        <button class="bg-white hover:bg-emerald-50 active:bg-emerald-100 text-[#075E54] border border-slate-200 text-xs font-semibold px-3 py-1.5 rounded-full whitespace-nowrap shadow-2xs transition-colors flex items-center gap-1" onclick="showWARewardsInfo()">
+          ⭐ Rewards
+        </button>
+      </div>
+
+      <!-- Footer Input Bar -->
+      <div class="bg-slate-100 p-2 flex items-center gap-2 border-t border-slate-200 flex-shrink-0">
+        <input type="text" id="wa-input-text" placeholder="Ask about menu or place order..." onkeypress="handleWAKeyPress(event)" class="flex-1 bg-white border border-slate-200 rounded-full px-4 py-2 text-xs sm:text-sm focus:outline-none focus:ring-2 focus:ring-emerald-600 shadow-inner">
+        <button onclick="submitUserWAMessage()" class="w-9 h-9 rounded-full bg-[#00A884] hover:bg-[#008f6f] active:bg-[#007a5e] text-white flex items-center justify-center shadow-sm transition-colors flex-shrink-0" title="Send message">
+          <i class="fa-solid fa-paper-plane text-xs"></i>
+        </button>
+      </div>
+
+      <!-- Floating Cart Bottom Bar -->
+      <div id="wa-cart-summary-bar" class="hidden bg-[#075E54] text-white px-4 py-2.5 flex items-center justify-between border-t-2 border-[#25D366] shadow-lg flex-shrink-0 animate-fade-in">
+        <div class="flex items-center gap-2 text-xs">
+          <i class="fa-solid fa-basket-shopping text-emerald-300 text-sm"></i>
+          <span id="wa-cart-qty" class="font-bold">0 Items</span>
+          <span class="text-emerald-300">|</span>
+          <strong id="wa-cart-price" class="text-sm font-extrabold text-white">Rs. 0</strong>
+        </div>
+        <button onclick="triggerWACheckout()" class="bg-[#25D366] hover:bg-emerald-400 active:bg-emerald-500 text-slate-900 font-extrabold text-xs px-3.5 py-1.5 rounded-full shadow-xs flex items-center gap-1 transition-colors">
+          Checkout <i class="fa-solid fa-chevron-right text-[10px]"></i>
+        </button>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Smart Food Customization Step Wizard Modal -->
+  <div id="smart-customizer-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-lg w-full overflow-hidden shadow-2xl border border-slate-200 animate-fade-in flex flex-col max-h-[90vh]">
+      <div class="bg-[#075E54] text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+        <h3 id="wiz-modal-title" class="font-bold text-sm sm:text-base flex items-center gap-2">
+          🍕 Customize Food Item
+        </h3>
+        <button onclick="closeModal('smart-customizer-modal')" class="text-white/80 hover:text-white text-lg transition-colors leading-none">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4 overflow-y-auto flex-1" id="wiz-modal-body">
+        <!-- Wizard steps rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Menu Category List Modal -->
+  <div id="wa-list-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-sm w-full overflow-hidden shadow-2xl border border-slate-200 animate-fade-in flex flex-col max-h-[80vh]">
+      <div class="bg-[#075E54] text-white px-4 py-3 flex items-center justify-between flex-shrink-0">
+        <h3 class="font-bold text-sm flex items-center gap-2">
+          🍕 Select Category
+        </h3>
+        <button onclick="closeModal('wa-list-modal')" class="text-white/80 hover:text-white text-lg transition-colors leading-none">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="overflow-y-auto flex-1 divide-y divide-slate-100" id="wa-list-options-container">
+        <!-- Categories list rendered by JS -->
+      </div>
+    </div>
+  </div>
+
+  <!-- Live Delivery Tracking Modal -->
+  <div id="tracking-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-2xl w-full overflow-hidden shadow-2xl border border-slate-200 animate-fade-in flex flex-col max-h-[90vh]">
+      <div class="bg-[#075E54] text-white px-5 py-3.5 flex items-center justify-between flex-shrink-0">
+        <h3 class="font-bold text-sm sm:text-base flex items-center gap-2">
+          <i class="fa-solid fa-map-location-dot text-emerald-300"></i> Live Delivery Tracking
+        </h3>
+        <button onclick="closeModal('tracking-modal')" class="text-white/80 hover:text-white text-lg transition-colors leading-none">
+          <i class="fa-solid fa-xmark"></i>
+        </button>
+      </div>
+      <div class="p-4 space-y-3 flex-1 overflow-y-auto">
+        <div class="grid grid-cols-3 gap-2 bg-slate-50 p-3 rounded-2xl border border-slate-200/80 text-xs">
+          <div>
+            <div class="text-[10px] text-slate-400 font-semibold uppercase">Order ID</div>
+            <div id="track-order-id" class="font-extrabold text-slate-900 font-mono mt-0.5">FF-2026-0002</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 font-semibold uppercase">Status</div>
+            <div id="track-order-status" class="font-bold text-emerald-700 mt-0.5">Out For Delivery</div>
+          </div>
+          <div>
+            <div class="text-[10px] text-slate-400 font-semibold uppercase">Assigned Rider</div>
+            <div id="track-rider-name" class="font-bold text-slate-800 mt-0.5">Rider Ali</div>
+          </div>
+        </div>
+        <div id="tracking-map" class="h-80 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-inner"></div>
+      </div>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/customer.js"></script>
+  <script src="/js/app.js"></script>
+</body>
+</html>

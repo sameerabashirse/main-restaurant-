@@ -1,0 +1,33 @@
+{
+  "name": "restaurant-chatbot-crm-system",
+  "version": "1.0.0",
+  "description": "AI Restaurant Ordering Chatbot + CRM + Delivery Tracking + Admin Dashboard System",
+  "main": "server.js",
+  "type": "commonjs",
+  "scripts": {
+    "start": "node server.js",
+    "dev": "node dev.js",
+    "build": "vite build",
+    "test": "node server.js --test"
+  },
+  "dependencies": {
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.5.4",
+    "bcryptjs": "^2.4.3",
+    "cors": "^2.8.5",
+    "dotenv": "^16.4.5",
+    "express": "^4.19.2",
+    "jsonwebtoken": "^9.0.2",
+    "leaflet": "^1.9.4",
+    "mongodb-memory-server": "^10.0.0",
+    "mongoose": "^8.5.2",
+    "postcss": "^8.5.26",
+    "react": "^19.2.8",
+    "react-dom": "^19.2.8",
+    "react-router-dom": "^6.28.0",
+    "socket.io": "^4.7.5",
+    "socket.io-client": "^4.8.3",
+    "tailwindcss": "^3.4.17",
+    "vite": "^8.2.2"
+  }
+}

@@ -1,0 +1,424 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>FeastFlow Executive Super Admin Portal</title>
+  
+  <!-- Fonts & Icons -->
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Outfit:wght@300;400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" />
+
+  <!-- Tailwind CSS -->
+  <script src="https://cdn.tailwindcss.com"></script>
+  <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="bg-slate-100 min-h-screen text-slate-800 antialiased flex flex-col">
+
+  <!-- Header -->
+  <header class="bg-gradient-to-r from-red-950 via-red-900 to-red-950 text-white py-3 px-4 shadow-md sticky top-0 z-30">
+    <div class="max-w-7xl mx-auto flex items-center justify-between">
+      <div class="flex items-center gap-3">
+        <div class="w-8 h-8 rounded-lg bg-amber-400 text-red-950 flex items-center justify-center font-black text-sm shadow-sm">
+          <i class="fa-solid fa-crown"></i>
+        </div>
+        <div>
+          <h1 class="text-sm sm:text-base font-extrabold tracking-wide">FeastFlow Executive Super Admin Portal</h1>
+          <p class="text-[11px] text-amber-200/90 font-medium hidden sm:block">Full System Control • Multi-Branch Operations</p>
+        </div>
+      </div>
+      <button onclick="performAdminLogout()" class="bg-white/10 hover:bg-white/20 active:bg-white/30 border border-white/20 text-white px-3 py-1.5 rounded-full text-xs font-semibold flex items-center gap-1.5 transition-colors shadow-xs">
+        <i class="fa-solid fa-power-off text-xs"></i> Logout
+      </button>
+    </div>
+  </header>
+
+  <!-- SaaS Main Container -->
+  <main class="flex-1 max-w-7xl w-full mx-auto p-4 md:p-6 flex flex-col md:flex-row gap-6">
+    
+    <!-- Sidebar Navigation -->
+    <aside class="w-full md:w-64 bg-slate-900 text-slate-200 rounded-3xl p-4 flex flex-col shadow-xl flex-shrink-0 border border-slate-800">
+      <div class="flex items-center gap-2.5 px-3 py-2 mb-3 border-b border-slate-800">
+        <div class="w-7 h-7 rounded bg-red-800 text-amber-300 flex items-center justify-center text-xs font-bold">
+          <i class="fa-solid fa-utensils"></i>
+        </div>
+        <span class="font-extrabold text-sm text-white tracking-wide">Super Admin</span>
+      </div>
+
+      <div class="px-3 py-1.5 bg-slate-800/80 rounded-xl mb-4 text-[11px] text-slate-300 font-semibold border border-slate-700 flex items-center justify-between">
+        <span>Role</span>
+        <strong class="text-amber-400 uppercase text-[10px] tracking-wider">Super Admin</strong>
+      </div>
+
+      <nav class="space-y-1 flex-1 overflow-y-auto max-h-[70vh] pr-1">
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold transition-colors bg-red-800 text-white" onclick="switchAdminTab('overview-tab')">
+          <i class="fa-solid fa-chart-pie w-4"></i> Overview
+        </button>
+        <button class="sidebar-item w-full flex items-center justify-between px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('orders-tab')">
+          <span class="flex items-center gap-2.5"><i class="fa-solid fa-receipt w-4"></i> Orders</span>
+          <span id="admin-pending-badge" class="bg-red-600 text-white text-[10px] px-2 py-0.5 rounded-full font-bold">0</span>
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('kitchen-tab')">
+          <i class="fa-solid fa-fire-burner w-4"></i> Kitchen KDS
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('menu-tab')">
+          <i class="fa-solid fa-utensils w-4"></i> Menu Manager
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('crm-tab')">
+          <i class="fa-solid fa-users w-4"></i> Customer CRM
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('payments-tab')">
+          <i class="fa-solid fa-credit-card w-4"></i> Payments Ledger
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('branches-tab')">
+          <i class="fa-solid fa-store w-4"></i> Branches
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('riders-tab')">
+          <i class="fa-solid fa-motorcycle w-4"></i> Riders & Fleet
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('tracking-tab')">
+          <i class="fa-solid fa-map-location-dot w-4"></i> Live Map
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('reviews-tab')">
+          <i class="fa-solid fa-star w-4"></i> Reviews & Ratings
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('whatsapp-inbox-tab')">
+          <i class="fa-brands fa-whatsapp w-4"></i> WhatsApp Inbox
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('reports-tab')">
+          <i class="fa-solid fa-file-export w-4"></i> Reports & Export
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('settings-tab')">
+          <i class="fa-solid fa-gear w-4"></i> Settings
+        </button>
+        <button class="sidebar-item w-full flex items-center gap-2.5 px-3 py-2 rounded-xl text-xs font-semibold text-slate-300 hover:bg-slate-800 transition-colors" onclick="switchAdminTab('audit-tab')">
+          <i class="fa-solid fa-shield-halved w-4"></i> Audit Logs
+        </button>
+      </nav>
+    </aside>
+
+    <!-- Main Content Panels Area -->
+    <div class="flex-1 min-w-0 bg-white rounded-3xl p-6 shadow-sm border border-slate-200/90">
+      
+      <!-- 1. Overview Tab -->
+      <div id="overview-tab" class="admin-tab-content space-y-6">
+        <div>
+          <h2 class="text-lg font-extrabold text-slate-900">Executive KPI Overview</h2>
+          <p class="text-xs text-slate-500">Real-time metrics across all active branches.</p>
+        </div>
+
+        <div class="grid grid-cols-2 lg:grid-cols-3 gap-4">
+          <div class="p-4 rounded-2xl bg-red-50/70 border border-red-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-red-800 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-receipt"></i></div>
+            <div><div class="text-[11px] font-bold text-red-950 uppercase">Today's Orders</div><h3 id="kpi-today-orders" class="text-xl font-extrabold text-slate-900 mt-0.5">0</h3></div>
+          </div>
+          <div class="p-4 rounded-2xl bg-amber-50/70 border border-amber-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-amber-600 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-money-bill-trend-up"></i></div>
+            <div><div class="text-[11px] font-bold text-amber-950 uppercase">Today's Revenue</div><h3 id="kpi-today-revenue" class="text-xl font-extrabold text-slate-900 mt-0.5">Rs. 0</h3></div>
+          </div>
+          <div class="p-4 rounded-2xl bg-blue-50/70 border border-blue-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-blue-600 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-clock"></i></div>
+            <div><div class="text-[11px] font-bold text-blue-950 uppercase">Pending Orders</div><h3 id="kpi-pending-orders" class="text-xl font-extrabold text-slate-900 mt-0.5">0</h3></div>
+          </div>
+          <div class="p-4 rounded-2xl bg-emerald-50/70 border border-emerald-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-emerald-700 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-check-double"></i></div>
+            <div><div class="text-[11px] font-bold text-emerald-950 uppercase">Completed</div><h3 id="kpi-completed-orders" class="text-xl font-extrabold text-slate-900 mt-0.5">0</h3></div>
+          </div>
+          <div class="p-4 rounded-2xl bg-purple-50/70 border border-purple-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-purple-700 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-users"></i></div>
+            <div><div class="text-[11px] font-bold text-purple-950 uppercase">Customers</div><h3 id="kpi-total-customers" class="text-xl font-extrabold text-slate-900 mt-0.5">0</h3></div>
+          </div>
+          <div class="p-4 rounded-2xl bg-orange-50/70 border border-orange-200 flex items-center gap-3.5">
+            <div class="w-11 h-11 rounded-xl bg-orange-600 text-white flex items-center justify-center text-lg shadow-xs"><i class="fa-solid fa-star"></i></div>
+            <div><div class="text-[11px] font-bold text-orange-950 uppercase">Avg Rating</div><h3 id="kpi-avg-rating" class="text-xl font-extrabold text-slate-900 mt-0.5">5.0 ⭐</h3></div>
+          </div>
+        </div>
+
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6 pt-2">
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <h4 class="font-bold text-xs text-slate-800 mb-3 flex items-center gap-1.5"><i class="fa-solid fa-fire text-red-700"></i> Best Selling Menu Items</h4>
+            <div id="best-sellers-list" class="space-y-1"></div>
+          </div>
+          <div class="bg-slate-50 border border-slate-200 rounded-2xl p-4">
+            <h4 class="font-bold text-xs text-slate-800 mb-3 flex items-center gap-1.5"><i class="fa-solid fa-users-gear text-blue-700"></i> Customer Segmentation</h4>
+            <div id="customer-segment-bars"></div>
+          </div>
+        </div>
+      </div>
+
+      <!-- 2. Orders Tab -->
+      <div id="orders-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Order Management</h2><p class="text-xs text-slate-500">Live order queue and rider dispatch assignments.</p></div>
+          <button onclick="loadAdminOrders()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-xl text-xs transition-colors flex items-center gap-1.5"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Order ID</th>
+                <th class="p-3">Customer</th>
+                <th class="p-3">Branch</th>
+                <th class="p-3">Items</th>
+                <th class="p-3">Total</th>
+                <th class="p-3">Payment</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Rider</th>
+                <th class="p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-orders-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 3. Kitchen KDS Tab -->
+      <div id="kitchen-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Kitchen Display System (KDS)</h2><p class="text-xs text-slate-500">Real-time incoming food preparation queue.</p></div>
+          <button onclick="loadAdminKitchenKDS()" class="bg-slate-100 hover:bg-slate-200 text-slate-700 font-semibold px-3 py-1.5 rounded-xl text-xs"><i class="fa-solid fa-rotate"></i> Refresh</button>
+        </div>
+        <div id="kitchen-kds-grid" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- 4. Menu Manager Tab -->
+      <div id="menu-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Menu Item Manager</h2><p class="text-xs text-slate-500">Add, edit, or archive restaurant dishes.</p></div>
+          <button onclick="openAddMenuItemModal()" class="bg-red-800 hover:bg-red-900 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"><i class="fa-solid fa-plus"></i> Add Item</button>
+        </div>
+        <div id="admin-menu-grid" class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+      </div>
+
+      <!-- 5. Customer CRM Tab -->
+      <div id="crm-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <div><h2 class="text-lg font-extrabold text-slate-900">Customer CRM Database</h2><p class="text-xs text-slate-500">Customer lifetime value, loyalty tiers, and order frequency.</p></div>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Customer ID</th>
+                <th class="p-3">Name & Phone</th>
+                <th class="p-3">Tier Level</th>
+                <th class="p-3">Orders</th>
+                <th class="p-3">Total Spent</th>
+                <th class="p-3">Loyalty Points</th>
+                <th class="p-3">Favorites</th>
+                <th class="p-3">Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-crm-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 6. Payments Tab -->
+      <div id="payments-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Payment Transactions Ledger</h2>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Transaction ID</th>
+                <th class="p-3">Order ID</th>
+                <th class="p-3">Customer</th>
+                <th class="p-3">Amount</th>
+                <th class="p-3">Method</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Timestamp</th>
+              </tr>
+            </thead>
+            <tbody id="admin-payments-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 7. Branches Tab -->
+      <div id="branches-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-extrabold text-slate-900">Branch Management</h2>
+          <button onclick="openAddBranchModal()" class="bg-red-800 hover:bg-red-900 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"><i class="fa-solid fa-plus"></i> Add Branch</button>
+        </div>
+        <div id="admin-branches-grid" class="grid grid-cols-1 md:grid-cols-2 gap-4"></div>
+      </div>
+
+      <!-- 8. Riders Tab -->
+      <div id="riders-tab" class="admin-tab-content hidden space-y-4">
+        <div class="flex items-center justify-between">
+          <h2 class="text-lg font-extrabold text-slate-900">Delivery Fleet & Riders</h2>
+          <button onclick="openAddRiderModal()" class="bg-red-800 hover:bg-red-900 text-white font-bold px-3.5 py-1.5 rounded-xl text-xs flex items-center gap-1.5 shadow-sm"><i class="fa-solid fa-plus"></i> Add Rider</button>
+        </div>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Rider ID</th>
+                <th class="p-3">Name</th>
+                <th class="p-3">Phone</th>
+                <th class="p-3">Vehicle</th>
+                <th class="p-3">Status</th>
+                <th class="p-3">Active Order</th>
+                <th class="p-3">Deliveries</th>
+              </tr>
+            </thead>
+            <tbody id="admin-riders-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- 9. Live Map Tab -->
+      <div id="tracking-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Live Delivery Operations Map</h2>
+        <div id="admin-live-map" class="h-96 w-full rounded-2xl overflow-hidden border border-slate-200 shadow-inner"></div>
+      </div>
+
+      <!-- 10. Reviews Tab -->
+      <div id="reviews-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Customer Reviews & Ratings Feed</h2>
+        <div id="admin-reviews-list" class="space-y-3"></div>
+      </div>
+
+      <!-- 11. WhatsApp Inbox Tab -->
+      <div id="whatsapp-inbox-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">WhatsApp Live Inbox & Human Support Handover</h2>
+        <div id="admin-wa-inbox-container" class="bg-slate-50 p-4 rounded-2xl border border-slate-200"></div>
+      </div>
+
+      <!-- 12. Reports Tab -->
+      <div id="reports-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">Sales Reports Export</h2>
+        <div class="bg-slate-50 border border-slate-200 rounded-2xl p-6 max-w-md">
+          <h4 class="font-bold text-sm text-slate-900 mb-1 flex items-center gap-1.5"><i class="fa-solid fa-file-csv text-emerald-700"></i> Download CSV Ledger</h4>
+          <p class="text-xs text-slate-500 mb-4">Export complete transaction records, customer history, and delivery metrics in CSV format.</p>
+          <button onclick="exportCSVReport()" class="bg-emerald-700 hover:bg-emerald-800 active:bg-emerald-900 text-white font-bold px-4 py-2.5 rounded-xl text-xs shadow-sm flex items-center gap-2 transition-colors">
+            <i class="fa-solid fa-download"></i> Export Sales CSV
+          </button>
+        </div>
+      </div>
+
+      <!-- 13. Settings Tab -->
+      <div id="settings-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">System & Branding Settings</h2>
+        <form onsubmit="saveSystemSettings(event)" class="bg-slate-50 border border-slate-200 rounded-2xl p-6 max-w-md space-y-4">
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Restaurant Name</label>
+            <input type="text" id="set-name" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-red-700">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Tax Rate (%)</label>
+            <input type="number" id="set-tax" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-red-700">
+          </div>
+          <div>
+            <label class="block text-xs font-bold text-slate-700 mb-1">Default Delivery Fee (Rs.)</label>
+            <input type="number" id="set-delivery-fee" class="w-full bg-white border border-slate-300 rounded-xl px-3 py-2 text-xs focus:ring-2 focus:ring-red-700">
+          </div>
+          <button type="submit" class="bg-red-800 hover:bg-red-900 text-white font-bold px-4 py-2 rounded-xl text-xs shadow-xs">
+            Save System Settings
+          </button>
+        </form>
+      </div>
+
+      <!-- 14. Audit Logs Tab -->
+      <div id="audit-tab" class="admin-tab-content hidden space-y-4">
+        <h2 class="text-lg font-extrabold text-slate-900">System Activity Audit Logs</h2>
+        <div class="overflow-x-auto rounded-2xl border border-slate-200">
+          <table class="w-full text-left border-collapse">
+            <thead>
+              <tr class="bg-slate-50 border-b border-slate-200 text-[11px] font-bold text-slate-500 uppercase tracking-wider">
+                <th class="p-3">Timestamp</th>
+                <th class="p-3">Action</th>
+                <th class="p-3">User</th>
+                <th class="p-3">Role</th>
+                <th class="p-3">Module</th>
+                <th class="p-3">Details</th>
+              </tr>
+            </thead>
+            <tbody id="admin-audit-table-body" class="divide-y divide-slate-100"></tbody>
+          </table>
+        </div>
+      </div>
+
+    </div>
+  </main>
+
+  <!-- Add Menu Item Modal -->
+  <div id="add-menu-item-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Add New Menu Item</h3>
+        <button onclick="closeModal('add-menu-item-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveNewMenuItem(event)" class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Item Name</label><input type="text" id="new-item-name" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div>
+          <label class="block text-xs font-semibold text-slate-700 mb-1">Category</label>
+          <select id="new-item-cat" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs">
+            <option value="Pizza">Pizza</option>
+            <option value="Burgers">Burgers</option>
+            <option value="Pasta">Pasta</option>
+            <option value="Drinks">Drinks</option>
+            <option value="Sides">Sides</option>
+          </select>
+        </div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Price (Rs.)</label><input type="number" id="new-item-price" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Image URL</label><input type="url" id="new-item-image" value="https://images.unsplash.com/photo-1513104890138-7c749659a591?w=500" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Description</label><textarea id="new-item-desc" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></textarea></div>
+        <button type="submit" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2.5 rounded-xl text-xs mt-2">Save Item</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Branch Modal -->
+  <div id="add-branch-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Add New Branch</h3>
+        <button onclick="closeModal('add-branch-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveNewBranch(event)" class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Branch Name</label><input type="text" id="new-branch-name" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Address</label><input type="text" id="new-branch-address" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Phone</label><input type="text" id="new-branch-phone" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Opening Hours</label><input type="text" id="new-branch-hours" value="12:00 PM - 12:00 AM" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <button type="submit" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2.5 rounded-xl text-xs mt-2">Create Branch</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Add Rider Modal -->
+  <div id="add-rider-modal" class="fixed inset-0 bg-slate-900/60 backdrop-blur-xs z-50 hidden items-center justify-center p-4">
+    <div class="bg-white rounded-3xl max-w-md w-full p-6 shadow-2xl border border-slate-200 animate-fade-in">
+      <div class="flex items-center justify-between mb-4">
+        <h3 class="font-extrabold text-sm sm:text-base text-slate-900">Add New Delivery Rider</h3>
+        <button onclick="closeModal('add-rider-modal')" class="text-slate-400 hover:text-slate-600"><i class="fa-solid fa-xmark"></i></button>
+      </div>
+      <form onsubmit="saveNewRider(event)" class="space-y-3">
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Rider Full Name</label><input type="text" id="new-rider-name" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Phone Number</label><input type="text" id="new-rider-phone" required class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <div><label class="block text-xs font-semibold text-slate-700 mb-1">Vehicle License Number</label><input type="text" id="new-rider-vehicle" value="LEK-1000" class="w-full bg-slate-50 border border-slate-300 rounded-xl px-3 py-2 text-xs"></div>
+        <button type="submit" class="w-full bg-red-800 hover:bg-red-900 text-white font-bold py-2.5 rounded-xl text-xs mt-2">Add Rider to Fleet</button>
+      </form>
+    </div>
+  </div>
+
+  <!-- Scripts -->
+  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"></script>
+  <script src="/socket.io/socket.io.js"></script>
+  <script src="/js/utils.js"></script>
+  <script src="/js/api.js"></script>
+  <script src="/js/auth.js"></script>
+  <script src="/js/admin.js"></script>
+  <script src="/js/app.js"></script>
+  <script>
+    document.addEventListener('DOMContentLoaded', () => {
+      enforceDashboardProtection('admin');
+      loadAdminAnalytics();
+    });
+  </script>
+</body>
+</html>

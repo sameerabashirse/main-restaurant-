@@ -1,0 +1,26 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  * { box-sizing: border-box; }
+  html, body, #root { min-height: 100%; }
+  body { margin: 0; font-family: 'Outfit', ui-sans-serif, system-ui, sans-serif; color: #1e293b; }
+  button, input, select, textarea { font: inherit; }
+}
+
+@layer components {
+  .portal-card { @apply rounded-3xl border border-slate-200/90 bg-white shadow-sm; }
+  .input-control { @apply w-full rounded-xl border border-slate-300 bg-white px-3.5 py-2.5 text-xs text-slate-800 outline-none transition focus:border-red-700 focus:ring-2 focus:ring-red-700/20; }
+  .primary-button { @apply rounded-xl bg-red-900 px-4 py-2.5 text-xs font-bold text-white shadow-sm transition hover:bg-red-800 active:scale-[.98]; }
+  .secondary-button { @apply rounded-xl border border-slate-300 bg-white px-4 py-2.5 text-xs font-bold text-slate-700 transition hover:bg-slate-50 active:scale-[.98]; }
+  .section-title { @apply text-lg font-extrabold tracking-tight text-slate-900; }
+}
+
+::-webkit-scrollbar { width: 6px; height: 6px; }
+::-webkit-scrollbar-track { background: transparent; }
+::-webkit-scrollbar-thumb { background: #cbd5e1; border-radius: 999px; }
+.wa-chat-texture { background-color: #efeae2; background-image: radial-gradient(#d9d3cc 0.7px, transparent 0.7px); background-size: 12px 12px; }
+.animate-fade-in { animation: fadeIn .25s ease-out; }
+@keyframes fadeIn { from { opacity: 0; transform: translateY(4px); } to { opacity: 1; transform: translateY(0); } }
+.leaflet-container { font: inherit; z-index: 0; }
