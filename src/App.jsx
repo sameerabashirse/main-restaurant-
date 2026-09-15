@@ -34,6 +34,7 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CustomerPage />} />
+      <Route path="/track/:orderId" element={<CustomerPage />} />
       <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/login" element={<Login kind="admin" />} />
       <Route path="/staff" element={<Navigate to="/staff/login" replace />} />

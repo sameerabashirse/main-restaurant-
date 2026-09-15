@@ -403,7 +403,11 @@ router.post('/status', authenticateToken, authorizeRoles('rider', 'admin', 'deli
       await order.save();
     } else if (nextStatus === CANONICAL_STATUS.OUT_FOR_DELIVERY) {
       order.order_status = CANONICAL_STATUS.OUT_FOR_DELIVERY;
-      waMessageText = `🚴 *Your delivery partner is on the way!*\n\nTrack your order live on WhatsApp:\n🗺️ Rider: ${order.rider_name || 'Rider Ali'} (${order.rider_phone || '03009998877'})`;
+      const host = req.headers.host || 'localhost:3000';
+      const protocol = req.headers['x-forwarded-proto'] || req.protocol || 'http';
+      const baseUrl = process.env.APP_BASE_URL || `${protocol}://${host}`;
+      const trackingUrl = `${baseUrl}/track/${order.order_id}`;
+      waMessageText = `🚴 *Your order is out for delivery.*\n\nTrack your rider live:\n${trackingUrl}\n\n🗺️ Rider: ${order.rider_name || 'Delivery Partner'} (${order.rider_phone || ''})`;
       await order.save();
     } else if (nextStatus === CANONICAL_STATUS.DELIVERED) {
       await processOrderDelivered(order, rider_id);

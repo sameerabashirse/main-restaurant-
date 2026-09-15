@@ -1,5 +1,5 @@
 import React, { useEffect, useMemo, useRef, useState } from 'react';
-import { Link } from 'react-router-dom';
+import { Link, useParams, useSearchParams } from 'react-router-dom';
 import L from 'leaflet';
 import 'leaflet/dist/leaflet.css';
 import { api } from '../services/api';
@@ -42,21 +42,21 @@ function MapPanel({ track, riderLocation, lastUpdated }) {
   useEffect(() => {
     if (!element.current || !track) return undefined;
 
-    const initialRider = riderLocation || track.rider?.location;
+    const initialRider = riderLocation || track.rider?.location || track.order?.riderLocation;
     const center = [initialRider?.latitude || initialRider?.lat || branch.lat, initialRider?.longitude || initialRider?.lng || branch.lng];
 
     const map = L.map(element.current, { zoomControl: true }).setView(center, 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
     const icon = (emoji) => L.divIcon({ className: 'map-icon', html: `<span style="font-size:26px">${emoji}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
 
-    L.marker([branch.lat, branch.lng], { icon: icon('🍽️') }).addTo(map).bindPopup('<b>FeastFlow Restaurant</b><br/>Pickup Branch');
+    L.marker([branch.lat, branch.lng], { icon: icon('🍽️') }).addTo(map).bindPopup(`<b>FeastFlow Restaurant</b><br/>${track.branch_location?.address || 'Pickup Branch'}`);
     L.marker([destLat, destLng], { icon: icon('🏠') }).addTo(map).bindPopup(`<b>Your Delivery Destination</b><br/>${track.order?.deliveryAddress?.formattedAddress || track.order?.delivery_address?.address || ''}`);
 
     const riderLat = initialRider?.latitude ?? initialRider?.lat;
     const riderLng = initialRider?.longitude ?? initialRider?.lng;
 
     if (riderLat && riderLng) {
-      riderMarkerRef.current = L.marker([riderLat, riderLng], { icon: icon('🚴') }).addTo(map).bindPopup('<b>Live Rider Location</b>').openPopup();
+      riderMarkerRef.current = L.marker([riderLat, riderLng], { icon: icon('🚴') }).addTo(map).bindPopup(`<b>Live Rider Location (${track.rider?.name || 'Rider'})</b>`).openPopup();
       polylineRef.current = L.polyline([[branch.lat, branch.lng], [riderLat, riderLng], [destLat, destLng]], { color: '#047857', weight: 4, dashArray: '6, 6' }).addTo(map);
     }
 
@@ -79,7 +79,7 @@ function MapPanel({ track, riderLocation, lastUpdated }) {
         riderMarkerRef.current.setLatLng([lat, lng]);
       } else {
         const icon = (emoji) => L.divIcon({ className: 'map-icon', html: `<span style="font-size:26px">${emoji}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
-        riderMarkerRef.current = L.marker([lat, lng], { icon: icon('🚴') }).addTo(mapRef.current).bindPopup('<b>Live Rider Location</b>').openPopup();
+        riderMarkerRef.current = L.marker([lat, lng], { icon: icon('🚴') }).addTo(mapRef.current).bindPopup(`<b>Live Rider Location (${track?.rider?.name || 'Rider'})</b>`).openPopup();
       }
 
       if (polylineRef.current) {
@@ -117,6 +117,11 @@ function MapPanel({ track, riderLocation, lastUpdated }) {
 }
 
 export default function CustomerPage() {
+  const { orderId: routeOrderId } = useParams();
+  const [searchParams] = useSearchParams();
+  const queryOrderId = searchParams.get('track') || searchParams.get('orderId') || searchParams.get('order_id');
+  const targetUrlOrderId = routeOrderId || queryOrderId;
+
   const [customer, setCustomer] = useState({ name: defaultName, phone: defaultPhone });
   const [branches, setBranches] = useState([]);
   const [messages, setMessages] = useState([]);
@@ -182,6 +187,30 @@ export default function CustomerPage() {
   const [lastLocationTime, setLastLocationTime] = useState(null);
 
   useEffect(() => {
+    if (targetUrlOrderId) {
+      const cleanOrderId = String(targetUrlOrderId).trim().toUpperCase();
+      activeOrderRef.current = cleanOrderId;
+      setActiveOrderId(cleanOrderId);
+      const socket = getSocket();
+      socket.emit('join:order', cleanOrderId);
+
+      api.get(`/api/chat/track?query=${encodeURIComponent(cleanOrderId)}`)
+        .then((result) => {
+          if (result.success && result.order) {
+            setTrack(result);
+            if (result.rider?.location) {
+              const loc = result.rider.location;
+              setRiderLocation({ lat: loc.latitude ?? loc.lat, lng: loc.longitude ?? loc.lng });
+              setLastLocationTime(loc.updatedAt || loc.updated_at || new Date());
+            } else {
+              setLastLocationTime(new Date());
+            }
+            setModal('track');
+          }
+        })
+        .catch(() => {});
+    }
+
     api.post('/api/chat/start', { phone: defaultPhone, name: defaultName }).then((result) => {
       if (result.customer) {
         setCustomer(result.customer);
@@ -198,7 +227,9 @@ export default function CustomerPage() {
       const name = result.customer?.name || defaultName;
       const firstMessage = { text: 'FeastFlow Restaurant', infoCard: true, buttons: ['Explore Food Menu', 'Reorder Last Meal', 'Branch Location'] };
       const nextMessages = [firstMessage];
-      if (result.is_returning && result.last_order) {
+      if (targetUrlOrderId) {
+        nextMessages.push({ text: `📍 *Tracking Live Order #${String(targetUrlOrderId).toUpperCase()}*\n\nYour order details and live rider location map are displayed below.`, buttons: ['Track Order', 'View Menu'] });
+      } else if (result.is_returning && result.last_order) {
         activeOrderRef.current = result.last_order.order_id;
         setActiveOrderId(result.last_order.order_id);
         const socket = getSocket();
@@ -968,7 +999,67 @@ export default function CustomerPage() {
       {toast && <Toast message={toast} tone="error" onClose={() => setToast('')} />}
       {modal === 'customize' && selectedItem && <Modal title={`Customize ${selectedItem.name}`} onClose={() => setModal(null)}><div className="space-y-4">{(selectedItem.customization?.flavours || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose flavour</label><select className="input-control" value={wizard.flavour} onChange={(event) => setWizard({ ...wizard, flavour: event.target.value })}>{selectedItem.customization.flavours.map((value) => <option key={value}>{value}</option>)}</select></div>}<div><label className="mb-2 block text-xs font-bold text-slate-700">Choose size</label><div className="grid grid-cols-2 gap-2">{(selectedItem.customization?.sizes || selectedItem.sizes || []).map((value) => <button key={value.name} onClick={() => setWizard({ ...wizard, size: value.name })} className={`rounded-xl border px-3 py-2 text-xs font-bold ${wizard.size === value.name ? 'border-red-900 bg-red-50 text-red-900' : 'border-slate-200 text-slate-600'}`}>{value.name}<span className="mt-1 block text-[10px] font-normal">{formatCurrency(value.price)}</span></button>)}</div></div>{(selectedItem.customization?.crusts || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose crust</label><select className="input-control" value={wizard.crust} onChange={(event) => setWizard({ ...wizard, crust: event.target.value })}>{selectedItem.customization.crusts.map((value) => <option key={value.name}>{value.name}</option>)}</select></div>}{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Add extras</label>{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).map((value) => <label key={value.name} className="flex items-center justify-between border-b border-slate-100 py-2 text-xs"><span>{value.name} <small className="text-slate-400">+{formatCurrency(value.price)}</small></span><input type="checkbox" checked={wizard.extras.includes(value.name)} onChange={(event) => setWizard({ ...wizard, extras: event.target.checked ? [...wizard.extras, value.name] : wizard.extras.filter((name) => name !== value.name) })} /></label>)}</div>}<button onClick={confirmAdd} disabled={isAddingToCart} className="primary-button w-full">{isAddingToCart ? 'Adding to cart…' : 'Add to Order'}</button></div></Modal>}
       {modal === 'review' && <Modal title="Review your order" onClose={() => setModal(null)}><form onSubmit={submitReview} className="space-y-3"><label className="block text-xs font-bold text-slate-700">Rating<select className="input-control mt-1" value={reviewForm.rating} onChange={(event) => setReviewForm({ ...reviewForm, rating: event.target.value })}>{[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{'⭐'.repeat(value)} ({value}/5)</option>)}</select></label><label className="block text-xs font-bold text-slate-700">Food quality<select className="input-control mt-1" value={reviewForm.food_quality} onChange={(event) => setReviewForm({ ...reviewForm, food_quality: event.target.value })}><option>Excellent</option><option>Good</option><option>Average</option><option>Poor</option></select></label><label className="block text-xs font-bold text-slate-700">Delivery speed<select className="input-control mt-1" value={reviewForm.delivery_speed} onChange={(event) => setReviewForm({ ...reviewForm, delivery_speed: event.target.value })}><option>Fast</option><option>On time</option><option>Slow</option></select></label><label className="block text-xs font-bold text-slate-700">Feedback<textarea className="input-control mt-1" rows="3" value={reviewForm.feedback} onChange={(event) => setReviewForm({ ...reviewForm, feedback: event.target.value })} /></label><button className="primary-button w-full">Submit review</button></form></Modal>}
-      {modal === 'track' && <Modal title="Live Delivery Tracking" onClose={() => setModal(null)} wide><form onSubmit={findOrder} className="mb-4 flex gap-2"><input name="query" defaultValue={activeOrderId || customer.phone || defaultPhone} placeholder="Order ID or phone number" className="input-control" required /><button className="primary-button">{busy ? 'Searching…' : 'Track'}</button></form>{track ? <div className="space-y-3"><div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs"><div><div className="text-[10px] uppercase text-slate-400">Order ID</div><b>{track.order?.order_id}</b></div><div><div className="text-[10px] uppercase text-slate-400">Status</div><b className="text-emerald-700">{track.order?.order_status}</b></div><div><div className="text-[10px] uppercase text-slate-400">Assigned Rider</div><b>{track.rider?.name || track.order?.rider_name || 'Rider Ali'}</b></div></div><MapPanel track={track} riderLocation={riderLocation} lastUpdated={lastLocationTime} />{track.rider && <p className="text-xs text-slate-600"><i className="fa-solid fa-motorcycle mr-2 text-red-900" />{track.rider.name} · {track.rider.phone}</p>}</div> : <p className="py-8 text-center text-xs text-slate-500">Enter an order ID or phone number to see live status.</p>}</Modal>}
+      {modal === 'track' && (
+        <Modal title="Live Delivery Tracking" onClose={() => setModal(null)} wide>
+          <form onSubmit={findOrder} className="mb-4 flex gap-2">
+            <input name="query" defaultValue={activeOrderId || customer.phone || defaultPhone} placeholder="Order ID or phone number" className="input-control" required />
+            <button className="primary-button">{busy ? 'Searching…' : 'Track'}</button>
+          </form>
+          {track ? (
+            <div className="space-y-3">
+              <div className="grid grid-cols-2 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs sm:grid-cols-4">
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order ID</div>
+                  <b className="text-slate-900">#{track.order?.order_id}</b>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Order Status</div>
+                  <b className="text-emerald-700 font-extrabold">{track.order?.order_status}</b>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Rider Partner</div>
+                  <b className="text-slate-800">{track.rider?.name || track.order?.rider_name || 'Rider Partner'}</b>
+                </div>
+                <div>
+                  <div className="text-[10px] font-bold uppercase tracking-wider text-slate-400">Est. Arrival</div>
+                  <b className="text-amber-800 font-black">{track.order?.estimated_delivery_time || '20-30 mins'}</b>
+                </div>
+              </div>
+
+              <MapPanel track={track} riderLocation={riderLocation} lastUpdated={lastLocationTime} />
+
+              <div className="grid gap-2 text-xs sm:grid-cols-2">
+                <div className="rounded-2xl bg-amber-50/70 p-3 border border-amber-200/60">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-amber-900">📍 Restaurant Pickup Location</p>
+                  <p className="mt-1 font-bold text-slate-800">{track.branch_location?.name || 'FeastFlow DHA Branch'}</p>
+                  <p className="text-[11px] text-slate-600">{track.branch_location?.address || 'Phase 5 Commercial DHA, Lahore'}</p>
+                </div>
+                <div className="rounded-2xl bg-slate-50 p-3 border border-slate-200">
+                  <p className="text-[10px] font-bold uppercase tracking-wider text-slate-400">🏠 Customer Delivery Destination</p>
+                  <p className="mt-1 font-bold text-slate-800">{track.order?.customer_name || 'Customer'}</p>
+                  <p className="text-[11px] text-slate-600">{track.order?.deliveryAddress?.formattedAddress || track.order?.delivery_address?.address || 'Lahore'}</p>
+                </div>
+              </div>
+
+              {(track.rider || track.order?.rider_phone) && (
+                <div className="flex items-center justify-between rounded-2xl bg-emerald-50 p-3 text-xs text-emerald-900 border border-emerald-200">
+                  <span className="font-bold flex items-center gap-2">
+                    <i className="fa-solid fa-motorcycle text-base text-emerald-700" />
+                    {track.rider?.name || track.order?.rider_name || 'Rider'} ({track.rider?.vehicle_number || 'Delivery Vehicle'})
+                  </span>
+                  {(track.rider?.phone || track.order?.rider_phone) && (
+                    <a href={`tel:${track.rider?.phone || track.order?.rider_phone}`} className="rounded-xl bg-emerald-700 px-3 py-1.5 text-xs font-bold text-white shadow-sm hover:bg-emerald-600">
+                      <i className="fa-solid fa-phone mr-1" /> Call Rider
+                    </a>
+                  )}
+                </div>
+              )}
+            </div>
+          ) : (
+            <p className="py-8 text-center text-xs text-slate-500">Enter an order ID or phone number to see live status.</p>
+          )}
+        </Modal>
+      )}
     </div>
   );
 }
