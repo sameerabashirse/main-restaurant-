@@ -6,6 +6,11 @@ let socket = null;
 let currentCustomer = null;
 let currentCart = [];
 let selectedBranch = { branch_id: 'BR-DHA', name: '📍 FeastFlow DHA Branch' };
+let currentWACategory = null;
+let isWizSubmitting = false;
+let confirmedWAOrder = null;
+let isWAModifyingOrder = false;
+let isWASubmittingModify = false;
 
 let currentWizItem = null;
 let wizSelectedFlavor = '';
@@ -248,7 +253,14 @@ async function identifyWhatsAppCustomer(phone, name) {
 function handleWAButtonClick(buttonId, buttonTitle) {
   appendWhatsAppOutboundMsg(buttonTitle);
 
-  if (buttonId === 'btn_view_menu' || buttonTitle.includes('Menu')) showWhatsAppCategoryList();
+  if (buttonId === 'btn_modify_order' || buttonTitle.includes('Modify Order')) handleWAModifyOrder();
+  else if (buttonId === 'btn_save_updated_order' || buttonTitle.includes('Save Updated Order')) saveUpdatedWAOrder();
+  else if (buttonId === 'btn_cancel_modification' || buttonTitle.includes('Cancel Changes')) cancelWAOrderModification();
+  else if (buttonId === 'btn_same_cat' || buttonTitle.includes('Same Category')) {
+    if (currentWACategory) selectWACategory(currentWACategory);
+    else showWhatsAppCategoryList();
+  }
+  else if (buttonId === 'btn_view_menu' || buttonTitle.includes('Menu')) showWhatsAppCategoryList();
   else if (buttonId === 'btn_location' || buttonTitle.includes('Location')) showWhatsAppLocationMessage();
   else if (buttonId === 'btn_reorder_last' || buttonTitle.includes('Same Again') || buttonTitle.includes('Reorder')) handleQuickReorderFlow();
   else if (buttonId === 'btn_checkout_now' || buttonTitle.includes('Checkout')) triggerWACheckout();
@@ -341,6 +353,7 @@ async function showWhatsAppCategoryList() {
 }
 
 async function selectWACategory(catName) {
+  currentWACategory = catName;
   Utils.closeModal('wa-list-modal');
   appendWhatsAppOutboundMsg(`Category: ${catName}`);
 
@@ -550,6 +563,9 @@ function recalculateWizTotal() {
 }
 
 function confirmWizAddToCart() {
+  if (isWizSubmitting || !currentWizItem) return;
+  isWizSubmitting = true;
+
   Utils.closeModal('smart-customizer-modal');
 
   let basePrice = wizSelectedSize ? wizSelectedSize.price : currentWizItem.price;
@@ -575,17 +591,24 @@ function confirmWizAddToCart() {
 
   updateWACartBar();
 
+  Utils.showToast('Item added to your cart successfully.', 'success');
+
   const cartSummaryMsg = `
-    <div class="font-bold text-slate-800 mb-1">🛒 Added to Cart!</div>
+    <div class="font-bold text-slate-800 mb-1">🛒 Item added to your cart successfully.</div>
     <div class="text-xs text-slate-700">🍕 <strong>${wizSelectedQty}x ${wizSelectedSize.name} ${wizSelectedFlavor || currentWizItem.name}</strong></div>
     ${wizSelectedCrust.name !== 'Classic' ? `<div class="text-[11px] text-slate-500">Crust: ${wizSelectedCrust.name}</div>` : ''}
     <div class="font-bold text-emerald-800 text-xs mt-1">Item Total: ${Utils.formatCurrency(totalPrice)}</div>
   `;
 
   appendWhatsAppInboundMsg(cartSummaryMsg, [
-    { id: 'btn_view_menu', title: '➕ Add More Items' },
+    { id: 'btn_same_cat', title: `🍕 Same Category (${currentWACategory || 'Menu'})` },
+    { id: 'btn_view_menu', title: '📋 Other Categories' },
     { id: 'btn_checkout_now', title: '✅ Proceed to Checkout' }
   ]);
+
+  setTimeout(() => {
+    isWizSubmitting = false;
+  }, 500);
 }
 
 function updateWACartBar() {
@@ -652,27 +675,141 @@ async function processWAOrderConfirmation() {
     if (data && data.success) {
       const order = data.order;
       activeTrackOrderId = order.order_id;
+      confirmedWAOrder = order;
       currentCart = [];
+      currentWACategory = null;
+      currentWizItem = null;
       updateWACartBar();
+      Utils.closeModal('smart-customizer-modal');
+      Utils.closeModal('wa-list-modal');
 
       const confirmedMsg = `
         <div class="font-bold text-emerald-800 text-sm mb-1">🎉 Order Confirmed!</div>
         <div class="text-xs text-slate-700 space-y-1">
-          <div>Order ID: <strong class="text-slate-900">${order.order_id}</strong></div>
-          <div>Total: <strong class="text-red-900">${Utils.formatCurrency(order.total_amount)}</strong></div>
-          <div>Status: <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">Received</span></div>
-          <div class="text-slate-500 text-[11px]">We have sent this order to our kitchen!</div>
+          <div>Order Number: <strong class="text-slate-900">${order.order_id}</strong></div>
+          <div>Total Amount: <strong class="text-red-900">${Utils.formatCurrency(order.total_amount)}</strong></div>
+          <div>Payment Method: <strong class="text-slate-800">${order.payment_method || 'Cash on Delivery'}</strong></div>
+          <div>Status: <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">Received (Sent to kitchen)</span></div>
         </div>
       `;
 
       appendWhatsAppInboundMsg(confirmedMsg, [
+        { id: 'btn_modify_order', title: '✏️ Modify Order' },
         { id: 'btn_track_order_live', title: '🚴 Track Live Delivery' },
-        { id: 'btn_view_menu', title: '🍕 Order More' }
+        { id: 'btn_review', title: '⭐ Review Order' }
       ]);
     }
   } catch (err) {
     appendWhatsAppInboundMsg('❌ Order placement failed. Please try again.');
   }
+}
+
+async function handleWAModifyOrder() {
+  const targetId = confirmedWAOrder ? confirmedWAOrder.order_id : activeTrackOrderId;
+  const phone = currentCustomer ? currentCustomer.phone : '03001234567';
+
+  if (!targetId) {
+    Utils.showToast('No active order found to modify.', 'warning');
+    return;
+  }
+
+  try {
+    const data = await API.get(`/api/chat/modify-eligibility/${targetId}?phone=${phone}`);
+    if (!data || !data.eligible) {
+      appendWhatsAppInboundMsg(`⚠️ ${data ? data.message : 'Order cannot be modified.'}`);
+      Utils.showToast(data ? data.message : 'Order cannot be modified.', 'error');
+      return;
+    }
+
+    isWAModifyingOrder = true;
+    confirmedWAOrder = data.order;
+    currentCart = (data.order.items || []).map(i => ({
+      item_id: i.item_id,
+      name: i.name,
+      quantity: i.quantity,
+      size: i.size || 'Medium',
+      extras: i.extras || [],
+      unit_price: i.unit_price,
+      total_price: i.total_price
+    }));
+
+    updateWACartBar();
+
+    const modifyMsg = `
+      <div class="font-bold text-amber-900 text-sm mb-1">✏️ Modifying Order #${data.order.order_id}</div>
+      <div class="text-xs text-slate-700">Explore menu below to add more items or adjust quantities.</div>
+      <div class="font-semibold text-slate-800 text-xs mt-1">Previous Total: ${Utils.formatCurrency(data.order.total_amount)}</div>
+    `;
+
+    appendWhatsAppInboundMsg(modifyMsg, [
+      { id: 'btn_view_menu', title: '🍕 Add Items from Menu' },
+      { id: 'btn_save_updated_order', title: '✅ Save Updated Order' },
+      { id: 'btn_cancel_modification', title: '❌ Cancel Changes' }
+    ]);
+  } catch (err) {
+    Utils.showToast('Failed to check modification eligibility.', 'error');
+  }
+}
+
+async function saveUpdatedWAOrder() {
+  if (!confirmedWAOrder || isWASubmittingModify) return;
+  if (currentCart.length === 0) {
+    Utils.showToast('Cart cannot be empty for order update.', 'warning');
+    return;
+  }
+
+  isWASubmittingModify = true;
+  const phone = currentCustomer ? currentCustomer.phone : '03001234567';
+
+  try {
+    const data = await API.put(`/api/chat/modify-order/${confirmedWAOrder.order_id}`, {
+      customer_phone: phone,
+      items: currentCart
+    });
+
+    if (data && data.success) {
+      confirmedWAOrder = data.order;
+      isWAModifyingOrder = false;
+      currentCart = [];
+      updateWACartBar();
+
+      Utils.showToast('Your order has been updated successfully.', 'success');
+
+      const updatedMsg = `
+        <div class="font-bold text-emerald-800 text-sm mb-1">🎉 Your order has been updated successfully!</div>
+        <div class="text-xs text-slate-700 space-y-1">
+          <div>Order Number: <strong class="text-slate-900">${data.order.order_id}</strong></div>
+          <div>Previous Total: <span>${Utils.formatCurrency(data.previous_total)}</span></div>
+          <div>Additional Amount: <strong class="text-amber-800">${Utils.formatCurrency(data.additional_amount)}</strong></div>
+          <div>Updated Final Total: <strong class="text-red-900">${Utils.formatCurrency(data.updated_total)}</strong></div>
+          <div>Payment Method: <strong>${data.order.payment_method || 'Cash on Delivery'}</strong></div>
+        </div>
+      `;
+
+      appendWhatsAppInboundMsg(updatedMsg, [
+        { id: 'btn_modify_order', title: '✏️ Modify Order' },
+        { id: 'btn_track_order_live', title: '🚴 Track Live Delivery' },
+        { id: 'btn_review', title: '⭐ Review Order' }
+      ]);
+    } else {
+      appendWhatsAppInboundMsg(`⚠️ ${data ? data.message : 'Order update failed.'}`);
+      Utils.showToast(data ? data.message : 'Order update failed.', 'error');
+    }
+  } catch (err) {
+    appendWhatsAppInboundMsg('❌ Order update failed. Please try again.');
+  } finally {
+    isWASubmittingModify = false;
+  }
+}
+
+function cancelWAOrderModification() {
+  isWAModifyingOrder = false;
+  currentCart = [];
+  updateWACartBar();
+  appendWhatsAppInboundMsg('❌ Order modifications cancelled. Your original confirmed order remains unchanged.', [
+    { id: 'btn_modify_order', title: '✏️ Modify Order' },
+    { id: 'btn_track_order_live', title: '🚴 Track Live Delivery' }
+  ]);
 }
 
 function promptWATrackOrder() {

@@ -4,6 +4,7 @@ const deliveryRiderSchema = new mongoose.Schema({
   rider_id: { type: String, required: true, unique: true },
   name: { type: String, required: true },
   phone: { type: String, required: true },
+  email: { type: String, default: null },
   vehicle_number: { type: String, default: 'LEK-4592' },
   status: {
     type: String,

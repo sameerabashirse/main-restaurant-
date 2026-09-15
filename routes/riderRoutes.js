@@ -3,9 +3,10 @@ const router = express.Router();
 const DeliveryRider = require('../models/DeliveryRider');
 const Order = require('../models/Order');
 const Customer = require('../models/Customer');
+const Branch = require('../models/Branch');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
-const { processOrderDelivered } = require('../services/orderService');
+const { processOrderDelivered, normalizeOrderStatus, CANONICAL_STATUS } = require('../services/orderService');
 
 const getIO = (req) => req.app.get('io');
 
@@ -16,13 +17,16 @@ router.get('/assigned/:rider_id', authenticateToken, authorizeRoles('rider', 'ad
     
     // If authenticated user is a rider, verify rider identity
     if (req.user.role === 'rider') {
-      const riderUser = await DeliveryRider.findOne({
+      const myRider = await DeliveryRider.findOne({
         $or: [
-          { rider_id },
+          { email: req.user.email },
           { phone: req.user.phone }
         ]
       });
-      if (!riderUser || (riderUser.rider_id !== rider_id && req.user.email !== 'rider@restaurant.com')) {
+
+      const allowedRiderId = myRider?.rider_id || (req.user.email === 'rider@restaurant.com' ? 'RIDER-101' : null);
+
+      if (!allowedRiderId || allowedRiderId !== rider_id) {
         return res.status(403).json({ success: false, message: 'Access Denied: You cannot access other riders’ delivery records.' });
       }
     }
@@ -33,12 +37,31 @@ router.get('/assigned/:rider_id', authenticateToken, authorizeRoles('rider', 'ad
     let activeOrder = null;
     if (rider.assigned_order_id) {
       activeOrder = await Order.findOne({ order_id: rider.assigned_order_id });
+      if (activeOrder) {
+        // Normalize status for clean frontend consumption
+        activeOrder.order_status = normalizeOrderStatus(activeOrder.order_status);
+      }
+    }
+
+    let branchLocation = { lat: 31.4704, lng: 74.4101, name: 'FeastFlow DHA Branch', address: 'Phase 5 Commercial DHA, Lahore', phone: '042-35894120' };
+    if (activeOrder?.branch_id) {
+      const branch = await Branch.findOne({ branch_id: activeOrder.branch_id });
+      if (branch) {
+        branchLocation = {
+          lat: branch.lat,
+          lng: branch.lng,
+          name: branch.name,
+          address: branch.address,
+          phone: branch.phone
+        };
+      }
     }
 
     res.json({
       success: true,
       rider,
-      active_order: activeOrder
+      active_order: activeOrder,
+      branch: branchLocation
     });
   } catch (err) {
     res.status(500).json({ success: false, message: err.message });
@@ -46,41 +69,132 @@ router.get('/assigned/:rider_id', authenticateToken, authorizeRoles('rider', 'ad
 });
 
 // POST /api/rider/location - Update rider live GPS location (Protected)
-router.post('/location', authenticateToken, authorizeRoles('rider', 'admin', 'delivery'), async (req, res) => {
+router.post('/location', authenticateToken, authorizeRoles('rider', 'admin', 'delivery', 'manager'), async (req, res) => {
   try {
-    const { rider_id, order_id, lat, lng } = req.body;
-    if (!rider_id || lat === undefined || lng === undefined) {
-      return res.status(400).json({ success: false, message: 'Rider ID, lat, and lng are required' });
+    const rawLat = req.body.latitude !== undefined ? req.body.latitude : req.body.lat;
+    const rawLng = req.body.longitude !== undefined ? req.body.longitude : req.body.lng;
+    const rawOrderId = req.body.orderId || req.body.order_id;
+    const rawAccuracy = req.body.accuracy;
+
+    if (rawLat === undefined || rawLng === undefined) {
+      return res.status(400).json({ success: false, message: 'Latitude and longitude coordinates are required.' });
     }
 
-    const rider = await DeliveryRider.findOne({ rider_id });
-    if (!rider) return res.status(404).json({ success: false, message: 'Rider not found' });
+    const numLat = Number(rawLat);
+    const numLng = Number(rawLng);
+    const numAcc = Number(rawAccuracy) || 10;
+    const timestamp = req.body.timestamp ? new Date(req.body.timestamp) : new Date();
 
-    rider.current_location = {
-      lat: Number(lat),
-      lng: Number(lng),
-      updated_at: new Date()
+    if (isNaN(numLat) || numLat < -90 || numLat > 90 || isNaN(numLng) || numLng < -180 || numLng > 180) {
+      return res.status(400).json({ success: false, message: 'Invalid coordinates: Latitude must be between -90 and 90, Longitude between -180 and 180.' });
+    }
+
+    // Resolve authenticated rider identity securely from JWT (do not trust client-supplied rider_id)
+    let actualRiderId = null;
+    let rider = null;
+
+    if (req.user.role === 'rider') {
+      rider = await DeliveryRider.findOne({
+        $or: [
+          { email: req.user.email },
+          { phone: req.user.phone }
+        ]
+      });
+
+      if (!rider && req.user.email === 'rider@restaurant.com') {
+        rider = await DeliveryRider.findOne({ rider_id: 'RIDER-101' });
+      }
+
+      if (!rider) {
+        console.warn(`[Rider GPS Auth Failed] No rider record found for email: ${req.user.email}`);
+        return res.status(403).json({ success: false, message: 'Access Denied: Rider record not found.' });
+      }
+
+      actualRiderId = rider.rider_id;
+    } else {
+      // Admins/Dispatch can specify rider_id
+      actualRiderId = req.body.rider_id || 'RIDER-101';
+      rider = await DeliveryRider.findOne({ rider_id: actualRiderId });
+    }
+
+    const targetOrderId = rawOrderId || rider?.assigned_order_id;
+    if (!targetOrderId) {
+      return res.status(400).json({ success: false, message: 'Order ID is required to push live delivery location.' });
+    }
+
+    // Verify rider is assigned to this exact order
+    const order = await Order.findOne({ order_id: targetOrderId });
+    if (!order) {
+      return res.status(404).json({ success: false, message: `Order ${targetOrderId} not found.` });
+    }
+
+    if (req.user.role === 'rider') {
+      if (order.rider_id && order.rider_id !== actualRiderId) {
+        console.warn(`[Rider GPS Rejected] Rider ${actualRiderId} is not assigned to order ${targetOrderId} (Assigned: ${order.rider_id})`);
+        return res.status(403).json({ success: false, message: `Access Denied: You are not assigned to order ${targetOrderId}.` });
+      }
+    }
+
+    console.log(`[Rider GPS Received] Order: ${targetOrderId} | Lat: ${numLat}, Lng: ${numLng}, Acc: ${numAcc}m | Rider: ${actualRiderId} (Auth: Verified)`);
+
+    // Persist latest location on Rider record
+    if (rider) {
+      rider.current_location = {
+        lat: numLat,
+        lng: numLng,
+        updated_at: timestamp
+      };
+      await rider.save();
+    }
+
+    // Persist latest location on Order record
+    order.riderLocation = {
+      latitude: numLat,
+      longitude: numLng,
+      accuracy: numAcc,
+      updatedAt: timestamp
     };
-    await rider.save();
+    await order.save();
 
-    // Broadcast live location to Socket.io subscribers
+    // Standardized Payload for Socket.IO Room Broadcast
+    const payload = {
+      orderId: targetOrderId,
+      latitude: numLat,
+      longitude: numLng,
+      accuracy: numAcc,
+      timestamp
+    };
+
+    // Backward compatibility payload
+    const legacyPayload = {
+      rider_id: actualRiderId,
+      order_id: targetOrderId,
+      lat: numLat,
+      lng: numLng,
+      accuracy: numAcc,
+      timestamp
+    };
+
     const io = getIO(req);
     if (io) {
-      io.emit('rider:location', {
-        rider_id,
-        order_id: order_id || rider.assigned_order_id,
-        lat: Number(lat),
-        lng: Number(lng),
-        timestamp: new Date()
-      });
+      // Emit ONLY to the specific order room
+      io.to(`order:${targetOrderId}`).emit('rider:location:update', payload);
+      io.to(`order:${targetOrderId}`).emit('rider:location', legacyPayload);
+      console.log(`📡 [Socket.IO Broadcast] Emitted rider:location:update to room order:${targetOrderId}`);
     }
 
     res.json({
       success: true,
       message: 'Rider GPS Location updated successfully',
-      location: rider.current_location
+      data: payload,
+      location: {
+        lat: numLat,
+        lng: numLng,
+        updated_at: timestamp
+      }
     });
   } catch (err) {
+    console.error('Error in /api/rider/location:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -96,19 +210,87 @@ router.post('/status', authenticateToken, authorizeRoles('rider', 'admin', 'deli
     const order = await Order.findOne({ order_id });
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
+    const currentStatus = normalizeOrderStatus(order.order_status);
+    const nextStatus = normalizeOrderStatus(status);
+
+    // Verify rider authorization
+    if (req.user.role === 'rider') {
+      const myRider = await DeliveryRider.findOne({
+        $or: [
+          { email: req.user.email },
+          { phone: req.user.phone }
+        ]
+      });
+      const allowedRiderId = myRider?.rider_id || (req.user.email === 'rider@restaurant.com' ? 'RIDER-101' : null);
+      if (order.rider_id && order.rider_id !== allowedRiderId) {
+        return res.status(403).json({ success: false, message: 'Access Denied: You are not assigned to this order.' });
+      }
+
+      // Enforce status sequence:
+      // RIDER_ASSIGNED -> RIDER_ACCEPTED -> PICKED_UP -> OUT_FOR_DELIVERY -> DELIVERED
+      if (nextStatus === CANONICAL_STATUS.OUT_FOR_DELIVERY) {
+        if (currentStatus !== CANONICAL_STATUS.PICKED_UP) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid status transition: Order must be marked PICKED_UP from restaurant before starting delivery (current status: ${currentStatus}).`
+          });
+        }
+      } else if (nextStatus === CANONICAL_STATUS.DELIVERED) {
+        if (currentStatus !== CANONICAL_STATUS.OUT_FOR_DELIVERY) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid status transition: Order must be OUT_FOR_DELIVERY before marking Delivered (current status: ${currentStatus}).`
+          });
+        }
+      } else if (nextStatus === CANONICAL_STATUS.PICKED_UP) {
+        const allowedPrevious = [CANONICAL_STATUS.RIDER_ACCEPTED, CANONICAL_STATUS.RIDER_ASSIGNED, CANONICAL_STATUS.READY_FOR_PICKUP];
+        if (!allowedPrevious.includes(currentStatus)) {
+          return res.status(400).json({
+            success: false,
+            message: `Invalid status transition: Order cannot be marked PICKED_UP from status ${currentStatus}.`
+          });
+        }
+      }
+    }
+
     let waMessageText = '';
-    if (status === 'Confirmed') waMessageText = `✅ *Your order ${order.order_id} has been confirmed.*`;
-    if (status === 'Preparing') waMessageText = `👨‍🍳 *Your food is being prepared in our kitchen.*`;
-    if (status === 'Ready') waMessageText = `🔥 *Your order is ready for delivery!*`;
-    if (status === 'Out For Delivery') {
-      order.order_status = 'Out For Delivery';
+    if (nextStatus === CANONICAL_STATUS.CONFIRMED) {
+      order.order_status = CANONICAL_STATUS.CONFIRMED;
+      waMessageText = `✅ *Your order ${order.order_id} has been confirmed.*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.PREPARING) {
+      order.order_status = CANONICAL_STATUS.PREPARING;
+      waMessageText = `👨‍🍳 *Your food is being prepared in our kitchen.*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.READY_FOR_PICKUP) {
+      order.order_status = CANONICAL_STATUS.READY_FOR_PICKUP;
+      waMessageText = `🔥 *Your order is ready for pickup!*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.RIDER_ASSIGNED) {
+      order.order_status = CANONICAL_STATUS.RIDER_ASSIGNED;
+      waMessageText = `🛵 *Rider ${order.rider_name || 'Ali'} has been assigned to your order.*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.RIDER_ACCEPTED) {
+      order.order_status = CANONICAL_STATUS.RIDER_ACCEPTED;
+      waMessageText = `🛵 *Rider ${order.rider_name || 'Ali'} accepted your order and is heading to the restaurant.*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.PICKED_UP) {
+      order.order_status = CANONICAL_STATUS.PICKED_UP;
+      waMessageText = `🛍️ *Rider has picked up your food from the restaurant.*`;
+      await order.save();
+    } else if (nextStatus === CANONICAL_STATUS.OUT_FOR_DELIVERY) {
+      order.order_status = CANONICAL_STATUS.OUT_FOR_DELIVERY;
       waMessageText = `🚴 *Your delivery partner is on the way!*\n\nTrack your order live on WhatsApp:\n🗺️ Rider: ${order.rider_name || 'Rider Ali'} (${order.rider_phone || '03009998877'})`;
       await order.save();
-    } else if (status === 'Delivered') {
+    } else if (nextStatus === CANONICAL_STATUS.DELIVERED) {
       await processOrderDelivered(order, rider_id);
       waMessageText = `🎉 *Your order ${order.order_id} has arrived!*\n\nHope you enjoyed your meal 😋\n\nHow was your experience?\n[⭐⭐⭐⭐⭐ Excellent] [⭐⭐⭐⭐ Good] [⭐⭐⭐ Average]`;
+    } else if (nextStatus === CANONICAL_STATUS.CANCELLED) {
+      order.order_status = CANONICAL_STATUS.CANCELLED;
+      waMessageText = `❌ *Your order ${order.order_id} has been cancelled.*`;
+      await order.save();
     } else {
-      order.order_status = status;
+      order.order_status = nextStatus;
       await order.save();
     }
 
@@ -125,13 +307,15 @@ router.post('/status', authenticateToken, authorizeRoles('rider', 'admin', 'deli
     // Broadcast via Socket.io
     const io = getIO(req);
     if (io) {
-      io.emit(`order:status:${order.order_id}`, {
+      const statusPayload = {
         order_id: order.order_id,
         order_status: order.order_status,
         wa_message: waMessageText,
         rider_name: order.rider_name,
         rider_phone: order.rider_phone
-      });
+      };
+      io.to(`order:${order.order_id}`).emit('order:status', statusPayload);
+      io.emit(`order:status:${order.order_id}`, statusPayload);
       io.emit('order:updated', order);
       io.emit('whatsapp:notification', {
         phone: order.customer_phone,
@@ -141,7 +325,7 @@ router.post('/status', authenticateToken, authorizeRoles('rider', 'admin', 'deli
 
     res.json({
       success: true,
-      message: `Order status updated to ${status}`,
+      message: `Order status updated to ${order.order_status}`,
       wa_notification: waMessageText,
       order
     });
@@ -151,3 +335,4 @@ router.post('/status', authenticateToken, authorizeRoles('rider', 'admin', 'deli
 });
 
 module.exports = router;
+

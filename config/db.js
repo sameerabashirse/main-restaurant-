@@ -19,30 +19,48 @@ const Counter = require('../models/Counter');
 
 let mongoServer;
 
+const startMemoryDatabase = async () => {
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
+  console.log('MongoDB Memory Server connected for local development.');
+};
+
+const hasPlaceholderCredentials = (uri) => {
+  if (!uri) return false;
+
+  const credentials = uri.match(/^mongodb(?:\+srv)?:\/\/([^@]+)@/i)?.[1];
+  return Boolean(credentials && (credentials.includes('<') || credentials.includes('>')));
+};
+
 const connectDB = async () => {
+  const configuredUri = process.env.MONGODB_URI?.trim();
+  const isProduction = process.env.NODE_ENV === 'production';
+
   try {
-    let uri = process.env.MONGODB_URI;
+    if (!configuredUri || hasPlaceholderCredentials(configuredUri)) {
+      if (isProduction) {
+        throw new Error('MONGODB_URI is missing or contains placeholder credentials.');
+      }
 
-    if (!uri) {
-      console.log('⚡ MONGODB_URI not set. Initializing MongoDB Memory Server for standalone execution...');
-      mongoServer = await MongoMemoryServer.create();
-      uri = mongoServer.getUri();
+      console.warn('MONGODB_URI is missing or contains placeholder credentials; using an in-memory database for local development.');
+      await startMemoryDatabase();
+    } else {
+      await mongoose.connect(configuredUri, { serverSelectionTimeoutMS: 10000 });
+      console.log('MongoDB connected successfully.');
     }
-
-    await mongoose.connect(uri);
-    console.log(`✅ MongoDB Connected successfully: ${uri.includes('127.0.0.1') || uri.includes('localhost') ? 'Local/Memory Mongo Server' : uri}`);
 
     await seedInitialData();
   } catch (error) {
-    console.error('❌ MongoDB Connection Error:', error.message);
-    if (!process.env.MONGODB_URI) {
-      console.log('🔄 Retrying fallback with MongoDB Memory Server...');
-      mongoServer = await MongoMemoryServer.create();
-      const uri = mongoServer.getUri();
-      await mongoose.connect(uri);
-      console.log('✅ Fallback MongoDB Memory Server Connected successfully!');
+    console.error('MongoDB connection error:', error.message);
+
+    if (!isProduction && mongoose.connection.readyState === 0) {
+      console.warn('Using an in-memory database because the configured development database is unavailable.');
+      await startMemoryDatabase();
       await seedInitialData();
+      return;
     }
+
+    throw error;
   }
 };
 

@@ -127,10 +127,45 @@ export function EmptyState({ icon = 'fa-inbox', title = 'Nothing here yet', text
 }
 
 export function StatusBadge({ status }) {
-  const value = String(status || 'Pending');
-  const lower = value.toLowerCase();
-  const tone = ['completed', 'delivered', 'paid', 'available', 'ready'].includes(lower) ? 'bg-emerald-100 text-emerald-700' : ['cancelled', 'failed'].includes(lower) ? 'bg-red-100 text-red-700' : ['preparing', 'confirmed', 'out for delivery', 'assigned'].includes(lower) ? 'bg-blue-100 text-blue-700' : 'bg-amber-100 text-amber-700';
-  return <span className={`inline-flex rounded-full px-2.5 py-1 text-[10px] font-bold ${tone}`}>{value}</span>;
+  const raw = String(status || 'PENDING');
+  const normalized = raw.trim().toUpperCase().replace(/[\s-]+/g, '_');
+
+  const labels = {
+    RECEIVED: 'Received',
+    CONFIRMED: 'Confirmed',
+    PREPARING: 'Preparing',
+    READY: 'Ready for Pickup',
+    READY_FOR_PICKUP: 'Ready for Pickup',
+    RIDER_ASSIGNED: 'Rider Assigned',
+    RIDER_ACCEPTED: 'Rider Accepted',
+    PICKED_UP: 'Picked Up',
+    OUT_FOR_DELIVERY: 'Out for Delivery',
+    DELIVERED: 'Delivered',
+    CANCELLED: 'Cancelled',
+    PENDING: 'Pending',
+    PAID: 'Paid',
+    FAILED: 'Failed',
+    AVAILABLE: 'Available',
+    ON_DELIVERY: 'On Delivery',
+    OFFLINE: 'Offline'
+  };
+
+  const label = labels[normalized] || raw;
+
+  let tone = 'bg-slate-100 text-slate-700';
+  if (['DELIVERED', 'COMPLETED', 'PAID', 'AVAILABLE', 'READY', 'READY_FOR_PICKUP'].includes(normalized)) {
+    tone = 'bg-emerald-50 text-emerald-700 border border-emerald-200';
+  } else if (['CANCELLED', 'FAILED', 'OFFLINE'].includes(normalized)) {
+    tone = 'bg-red-50 text-red-700 border border-red-200';
+  } else if (['OUT_FOR_DELIVERY', 'PICKED_UP', 'ON_DELIVERY'].includes(normalized)) {
+    tone = 'bg-amber-50 text-amber-800 border border-amber-300 animate-pulse';
+  } else if (['CONFIRMED', 'PREPARING', 'RIDER_ASSIGNED', 'RIDER_ACCEPTED'].includes(normalized)) {
+    tone = 'bg-blue-50 text-blue-700 border border-blue-200';
+  } else if (['RECEIVED', 'PENDING'].includes(normalized)) {
+    tone = 'bg-slate-100 text-slate-700 border border-slate-200';
+  }
+
+  return <span className={`inline-flex items-center gap-1 rounded-full px-2.5 py-0.5 text-[10px] font-bold ${tone}`}>{label}</span>;
 }
 
 export function DataTable({ columns, rows, emptyText = 'No records found.' }) {

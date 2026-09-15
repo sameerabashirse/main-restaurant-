@@ -20,8 +20,38 @@ const orderSchema = new mongoose.Schema({
   items: [orderItemSchema],
   delivery_type: {
     type: String,
-    enum: ['Home Delivery', 'Pickup'],
+    enum: ['Home Delivery', 'Pickup', 'DELIVERY', 'PICKUP'],
     default: 'Home Delivery'
+  },
+  orderType: {
+    type: String,
+    enum: ['DELIVERY', 'PICKUP', 'Home Delivery', 'Pickup'],
+    default: 'DELIVERY'
+  },
+  customer: {
+    name: { type: String },
+    phone: { type: String }
+  },
+  deliveryAddress: {
+    houseNumber: { type: String, default: '' },
+    streetNumber: { type: String, default: '' },
+    area: { type: String, default: '' },
+    city: { type: String, default: '' },
+    landmark: { type: String, default: '' },
+    instructions: { type: String, default: '' },
+    formattedAddress: { type: String, default: '' }
+  },
+  deliveryLocation: {
+    latitude: { type: Number },
+    longitude: { type: Number },
+    accuracy: { type: Number },
+    confirmedAt: { type: Date }
+  },
+  riderLocation: {
+    latitude: { type: Number },
+    longitude: { type: Number },
+    accuracy: { type: Number },
+    updatedAt: { type: Date }
   },
   delivery_address: {
     label: { type: String, default: 'Home' },
@@ -41,8 +71,28 @@ const orderSchema = new mongoose.Schema({
   },
   order_status: {
     type: String,
-    enum: ['Received', 'Confirmed', 'Preparing', 'Ready', 'Out For Delivery', 'Delivered', 'Cancelled'],
-    default: 'Received'
+    enum: [
+      'RECEIVED',
+      'CONFIRMED',
+      'PREPARING',
+      'READY_FOR_PICKUP',
+      'RIDER_ASSIGNED',
+      'RIDER_ACCEPTED',
+      'PICKED_UP',
+      'OUT_FOR_DELIVERY',
+      'DELIVERED',
+      'CANCELLED',
+      // Legacy compatibility
+      'Received',
+      'Confirmed',
+      'Preparing',
+      'Ready',
+      'Out For Delivery',
+      'Out for Delivery',
+      'Delivered',
+      'Cancelled'
+    ],
+    default: 'RECEIVED'
   },
   total_amount: { type: Number, required: true },
   rider_id: { type: String, default: null },
@@ -51,6 +101,13 @@ const orderSchema = new mongoose.Schema({
   estimated_delivery_time: { type: String, default: '30-40 mins' },
   is_reviewed: { type: Boolean, default: false },
   is_delivery_processed: { type: Boolean, default: false },
+  is_updated: { type: Boolean, default: false },
+  modification_history: [{
+    modified_at: { type: Date, default: Date.now },
+    previous_total: { type: Number },
+    new_total: { type: Number },
+    items_count: { type: Number }
+  }],
   whatsapp_notification_sent: { type: Boolean, default: true },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }

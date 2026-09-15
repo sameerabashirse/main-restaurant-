@@ -11,7 +11,7 @@ const ReviewReward = require('../models/ReviewReward');
 const Reminder = require('../models/Reminder');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const Counter = require('../models/Counter');
-const { validateAndCalculateCart } = require('../services/orderService');
+const { validateAndCalculateCart, normalizeOrderStatus, CANONICAL_STATUS } = require('../services/orderService');
 
 const getIO = (req) => req.app.get('io');
 
@@ -137,23 +137,100 @@ router.post('/checkout', async (req, res) => {
       branch_id,
       items,
       delivery_type,
+      orderType: rawOrderType,
       delivery_address,
-      payment_method
+      deliveryAddress: rawDeliveryAddress,
+      deliveryLocation: rawDeliveryLocation,
+      payment_method,
+      customer: rawCustomer
     } = req.body;
 
-    if (!customer_phone || !items || items.length === 0) {
+    const phoneVal = (rawCustomer?.phone || customer_phone || '').trim();
+    const nameVal = (rawCustomer?.name || customer_name || 'Customer').trim();
+
+    if (!phoneVal || !items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Phone number and cart items are required' });
     }
 
-    let customer = await Customer.findOne({ phone: customer_phone.trim() });
+    const isPickup = (rawOrderType === 'PICKUP' || rawOrderType === 'Pickup' || delivery_type === 'Pickup' || delivery_type === 'PICKUP');
+    const orderType = isPickup ? 'PICKUP' : 'DELIVERY';
+    const legacyDeliveryType = isPickup ? 'Pickup' : 'Home Delivery';
+
+    // Parse Delivery Address
+    let houseNumber = rawDeliveryAddress?.houseNumber || '';
+    let streetNumber = rawDeliveryAddress?.streetNumber || '';
+    let area = rawDeliveryAddress?.area || '';
+    let city = rawDeliveryAddress?.city || 'Lahore';
+    let landmark = rawDeliveryAddress?.landmark || '';
+    let instructions = rawDeliveryAddress?.instructions || '';
+    let formattedAddress = rawDeliveryAddress?.formattedAddress || '';
+
+    if (!formattedAddress) {
+      if (rawDeliveryAddress && (houseNumber || streetNumber || area)) {
+        const parts = [
+          houseNumber ? `House/Flat ${houseNumber}` : '',
+          streetNumber ? `Street ${streetNumber}` : '',
+          area,
+          landmark ? `Near ${landmark}` : '',
+          city
+        ].filter(Boolean);
+        formattedAddress = parts.join(', ');
+      } else if (delivery_address?.address) {
+        formattedAddress = delivery_address.address;
+      } else if (typeof delivery_address === 'string') {
+        formattedAddress = delivery_address;
+      } else {
+        formattedAddress = isPickup ? 'Store Pickup (DHA Branch)' : 'Phase 5 DHA, Lahore';
+      }
+    }
+
+    // Parse Delivery Location Coordinates
+    let lat = rawDeliveryLocation?.latitude ?? delivery_address?.lat;
+    let lng = rawDeliveryLocation?.longitude ?? delivery_address?.lng;
+    let accuracy = rawDeliveryLocation?.accuracy ?? null;
+
+    if (!isPickup) {
+      // Validate coordinates for Home Delivery
+      if (lat !== undefined && lat !== null && lng !== undefined && lng !== null) {
+        lat = Number(lat);
+        lng = Number(lng);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+          return res.status(400).json({ success: false, message: 'Invalid location coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180.' });
+        }
+      } else {
+        // Fallback default coordinates if not provided (for backward compatibility)
+        lat = 31.4704;
+        lng = 74.4101;
+      }
+    } else {
+      // Pickup does not require customer coordinates
+      lat = lat ? Number(lat) : 31.4704;
+      lng = lng ? Number(lng) : 74.4101;
+    }
+
+    let customer = await Customer.findOne({ phone: phoneVal });
     if (!customer) {
       const newId = await Counter.getNextSequence('customer_id', 'CUST-', 4, 1000);
       customer = await Customer.create({
         customer_id: newId,
-        name: customer_name ? customer_name.trim() : 'Customer',
-        phone: customer_phone.trim(),
-        addresses: [delivery_address || { label: 'Home', address: 'House 42, Street 10, Phase 5 DHA, Lahore', lat: 31.4750, lng: 74.4200 }]
+        name: nameVal,
+        phone: phoneVal,
+        addresses: [
+          { label: 'Home', address: formattedAddress, lat, lng }
+        ]
       });
+    } else {
+      if (nameVal && nameVal !== 'Customer' && customer.name !== nameVal) {
+        customer.name = nameVal;
+      }
+      // Add or update recent address in customer profile
+      if (!isPickup && formattedAddress) {
+        const existingAddrIndex = (customer.addresses || []).findIndex(a => a.address === formattedAddress);
+        if (existingAddrIndex === -1) {
+          customer.addresses.unshift({ label: 'Delivery', address: formattedAddress, lat, lng });
+          if (customer.addresses.length > 5) customer.addresses = customer.addresses.slice(0, 5);
+        }
+      }
     }
 
     // SERVER-SIDE PRICE VALIDATION & CALCULATION (Prevents client-side price tampering)
@@ -168,21 +245,48 @@ router.post('/checkout', async (req, res) => {
       if (branchObj) branchName = branchObj.name;
     }
 
-    const newOrder = await Order.create({
+    const orderSnapshot = {
       order_id: orderId,
       customer_id: customer.customer_id,
       customer_name: customer.name,
       customer_phone: customer.phone,
+      customer: {
+        name: customer.name,
+        phone: customer.phone
+      },
       branch_id: branch_id || 'BR-DHA',
       branch_name: branchName,
       items: processedItems,
-      delivery_type: delivery_type || 'Home Delivery',
-      delivery_address: delivery_address || (customer.addresses && customer.addresses[0]) || { label: 'Home', address: 'House 42, Street 10, Phase 5 DHA, Lahore' },
+      delivery_type: legacyDeliveryType,
+      orderType: orderType,
+      deliveryAddress: {
+        houseNumber,
+        streetNumber,
+        area,
+        city,
+        landmark,
+        instructions,
+        formattedAddress
+      },
+      deliveryLocation: isPickup ? null : {
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        confirmedAt: new Date()
+      },
+      delivery_address: {
+        label: isPickup ? 'Pickup' : 'Home',
+        address: formattedAddress,
+        lat,
+        lng
+      },
       payment_method: payment_method || 'Cash on Delivery',
       payment_status: 'Pending',
-      order_status: 'Received',
+      order_status: CANONICAL_STATUS.RECEIVED,
       total_amount: totalAmount
-    });
+    };
+
+    const newOrder = await Order.create(orderSnapshot);
 
     customer.total_orders += 1;
     customer.last_order_date = new Date();
@@ -191,6 +295,12 @@ router.post('/checkout', async (req, res) => {
     });
     customer.updateCustomerLevel();
     await customer.save();
+
+    // Clear checkout draft in session if exists
+    await WhatsAppSession.findOneAndUpdate(
+      { phone: customer.phone },
+      { checkout_state: null, checkout_draft: {}, last_interaction: new Date() }
+    );
 
     const io = getIO(req);
     if (io) {
@@ -204,6 +314,160 @@ router.post('/checkout', async (req, res) => {
     });
   } catch (err) {
     console.error('Checkout error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// GET /api/chat/modify-eligibility/:order_id - Check 10-minute modification window and order status
+router.get('/modify-eligibility/:order_id', async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    const { phone } = req.query;
+
+    const order = await Order.findOne({ order_id });
+    if (!order) {
+      return res.status(404).json({ success: false, eligible: false, message: 'Order not found.' });
+    }
+
+    if (phone) {
+      const cleanReqPhone = String(phone).replace(/\D/g, '');
+      const cleanOrderPhone = String(order.customer_phone || '').replace(/\D/g, '');
+      if (cleanReqPhone && cleanOrderPhone && !cleanOrderPhone.includes(cleanReqPhone) && !cleanReqPhone.includes(cleanOrderPhone)) {
+        return res.status(403).json({ success: false, eligible: false, message: 'Order ownership validation failed.' });
+      }
+    }
+
+    const now = Date.now();
+    const createdAt = new Date(order.created_at || order.createdAt || Date.now()).getTime();
+    const isSimulatedExpired = req.query.simulate_expired === 'true';
+    const elapsedMs = isSimulatedExpired ? (11 * 60 * 1000) : Math.max(0, now - createdAt);
+    const windowMs = 10 * 60 * 1000;
+    const remainingSeconds = Math.max(0, Math.floor((windowMs - elapsedMs) / 1000));
+    const isExpired = elapsedMs > windowMs;
+
+    const currentStatus = normalizeOrderStatus(order.order_status);
+    const lockedStatuses = ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'READY_FOR_PICKUP', 'PICKED_UP'];
+    const isLocked = lockedStatuses.includes(currentStatus);
+
+    let message = 'Eligible for modification';
+    if (isExpired) {
+      message = 'The 10-minute modification window has expired. Please contact the restaurant for assistance.';
+    } else if (isLocked) {
+      message = 'Your order is already being prepared and can no longer be modified.';
+    }
+
+    res.json({
+      success: true,
+      eligible: !isExpired && !isLocked,
+      remaining_seconds: remainingSeconds,
+      is_expired: isExpired,
+      is_locked: isLocked,
+      order_status: currentStatus,
+      message,
+      server_time: new Date(),
+      created_at: order.created_at,
+      order
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/chat/modify-order/:order_id - Update existing order atomically within 10 mins
+router.put('/modify-order/:order_id', async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    const { customer_phone, items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Cart items are required for order modification.' });
+    }
+
+    const order = await Order.findOne({ order_id });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    // 1. Ownership Validation
+    if (customer_phone) {
+      const cleanReqPhone = String(customer_phone).replace(/\D/g, '');
+      const cleanOrderPhone = String(order.customer_phone || '').replace(/\D/g, '');
+      if (cleanReqPhone && cleanOrderPhone && !cleanOrderPhone.includes(cleanReqPhone) && !cleanReqPhone.includes(cleanOrderPhone)) {
+        return res.status(403).json({ success: false, message: 'Order ownership validation failed.' });
+      }
+    }
+
+    // 2. Server-Recorded 10-Minute Expiry Check
+    const now = Date.now();
+    const createdAt = new Date(order.created_at || order.createdAt || Date.now()).getTime();
+    const isSimulatedExpired = req.query.simulate_expired === 'true';
+    const elapsedMs = isSimulatedExpired ? (11 * 60 * 1000) : Math.max(0, now - createdAt);
+    const windowMs = 10 * 60 * 1000;
+
+    if (elapsedMs > windowMs) {
+      return res.status(400).json({
+        success: false,
+        expired: true,
+        message: 'The 10-minute modification window has expired. Please contact the restaurant for assistance.'
+      });
+    }
+
+    // 3. Order Status Safety Check
+    const currentStatus = normalizeOrderStatus(order.order_status);
+    const lockedStatuses = ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'READY_FOR_PICKUP', 'PICKED_UP'];
+    if (lockedStatuses.includes(currentStatus)) {
+      return res.status(400).json({
+        success: false,
+        locked: true,
+        message: 'Your order is already being prepared and can no longer be modified.'
+      });
+    }
+
+    // 4. Server-Side Price & Item Recalculation
+    const { processedItems, totalAmount } = await validateAndCalculateCart(items);
+
+    const previousTotal = order.total_amount;
+    const additionalAmount = Math.max(0, totalAmount - previousTotal);
+
+    // 5. Atomic Order Update (Preserves same order_id, customer, address, payment)
+    order.items = processedItems;
+    order.total_amount = totalAmount;
+    order.is_updated = true;
+    order.updated_at = new Date();
+
+    if (!order.modification_history) order.modification_history = [];
+    order.modification_history.push({
+      modified_at: new Date(),
+      previous_total: previousTotal,
+      new_total: totalAmount,
+      items_count: processedItems.length
+    });
+
+    await order.save();
+
+    // 6. Real-time Kitchen & Staff Socket Notifications
+    const io = getIO(req);
+    if (io) {
+      io.emit('order:updated', order);
+      io.emit('order:modified', {
+        order_id: order.order_id,
+        order,
+        previous_total: previousTotal,
+        new_total: totalAmount,
+        additional_amount: additionalAmount
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Your order has been updated successfully.',
+      order,
+      previous_total: previousTotal,
+      additional_amount: additionalAmount,
+      updated_total: totalAmount
+    });
+  } catch (err) {
+    console.error('Modify order error:', err);
     res.status(500).json({ success: false, message: err.message });
   }
 });
@@ -228,16 +492,33 @@ router.get('/track', async (req, res) => {
       return res.status(404).json({ success: false, message: 'No matching order found.' });
     }
 
-    let riderLocation = null;
+    // Normalize order status for frontend display
+    order.order_status = normalizeOrderStatus(order.order_status);
+
+    let riderData = null;
     if (order.rider_id) {
       const rider = await DeliveryRider.findOne({ rider_id: order.rider_id });
       if (rider) {
-        riderLocation = {
+        const rawLoc = order.riderLocation || rider.current_location || {};
+        const lat = rawLoc.latitude ?? rawLoc.lat;
+        const lng = rawLoc.longitude ?? rawLoc.lng;
+        const accuracy = rawLoc.accuracy ?? 10;
+        const updatedAt = rawLoc.updatedAt ?? rawLoc.updated_at ?? new Date();
+
+        riderData = {
           rider_id: rider.rider_id,
           name: rider.name,
           phone: rider.phone,
           vehicle_number: rider.vehicle_number,
-          location: rider.current_location
+          location: lat !== undefined && lng !== undefined ? {
+            latitude: Number(lat),
+            longitude: Number(lng),
+            lat: Number(lat),
+            lng: Number(lng),
+            accuracy: Number(accuracy),
+            updated_at: updatedAt,
+            updatedAt: updatedAt
+          } : null
         };
       }
     }
@@ -249,7 +530,7 @@ router.get('/track', async (req, res) => {
     res.json({
       success: true,
       order,
-      rider: riderLocation,
+      rider: riderData,
       branch_location: branchLocation
     });
   } catch (err) {

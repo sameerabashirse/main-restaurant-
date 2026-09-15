@@ -90,10 +90,189 @@ function Overview({ result }) {
   return <div className="space-y-5"><div><h2 className="section-title">Operations Overview</h2><p className="text-xs text-slate-500">A live view of FeastFlow restaurant performance.</p></div><div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4"><StatCard label="Today's orders" value={metrics.today_orders_count ?? '—'} icon="fa-receipt" /><StatCard label="Today's revenue" value={metrics.today_revenue != null ? formatCurrency(metrics.today_revenue) : '—'} icon="fa-chart-line" tone="green" /><StatCard label="Pending orders" value={metrics.pending_orders_count ?? '—'} icon="fa-hourglass-half" tone="amber" /><StatCard label="Active riders" value={metrics.active_riders ?? '—'} icon="fa-motorcycle" tone="blue" /></div><div className="grid gap-5 lg:grid-cols-2"><div className="rounded-2xl border border-slate-200 p-5"><h3 className="mb-4 text-sm font-extrabold text-slate-900">Customer snapshot</h3><div className="grid grid-cols-2 gap-3 text-xs"><p className="rounded-xl bg-slate-50 p-3 text-slate-500">Total customers <b className="mt-1 block text-lg text-slate-900">{metrics.total_customers ?? '—'}</b></p><p className="rounded-xl bg-slate-50 p-3 text-slate-500">Average rating <b className="mt-1 block text-lg text-slate-900">{metrics.average_rating ?? '—'} ★</b></p><p className="rounded-xl bg-slate-50 p-3 text-slate-500">Completed orders <b className="mt-1 block text-lg text-slate-900">{metrics.completed_orders_count ?? '—'}</b></p><p className="rounded-xl bg-slate-50 p-3 text-slate-500">Repeat customers <b className="mt-1 block text-lg text-slate-900">{metrics.repeat_customers_rate ?? '—'}%</b></p></div></div><div className="rounded-2xl border border-slate-200 p-5"><h3 className="mb-4 text-sm font-extrabold text-slate-900">Best sellers</h3>{result?.best_sellers?.length ? <div className="space-y-3">{result.best_sellers.map((item) => <div key={item.name} className="flex items-center gap-3 text-xs"><span className="flex h-7 w-7 items-center justify-center rounded-lg bg-amber-100 text-amber-700"><i className="fa-solid fa-fire" /></span><span className="flex-1 font-semibold text-slate-700">{item.name}</span><b className="text-slate-900">{item.count} orders</b></div>)}</div> : <EmptyState icon="fa-chart-simple" title="No sales yet" />}</div></div></div>;
 }
 
+function OrderLocationMap({ order }) {
+  const element = useRef(null);
+  useEffect(() => {
+    if (!element.current || !order) return undefined;
+    const lat = order.deliveryLocation?.latitude ?? order.delivery_address?.lat ?? 31.4704;
+    const lng = order.deliveryLocation?.longitude ?? order.delivery_address?.lng ?? 74.4101;
+    const map = L.map(element.current).setView([lat, lng], 14);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', { attribution: '© OpenStreetMap contributors' }).addTo(map);
+    const icon = (emoji) => L.divIcon({ className: 'map-icon', html: `<span style="font-size:26px">${emoji}</span>`, iconSize: [30, 30], iconAnchor: [15, 15] });
+    L.marker([31.4704, 74.4101], { icon: icon('🍽️') }).addTo(map).bindPopup('FeastFlow Restaurant DHA');
+    L.marker([lat, lng], { icon: icon('🏠') }).addTo(map).bindPopup(`<b>${order.customer?.name || order.customer_name || 'Customer'}</b><br/>${order.deliveryAddress?.formattedAddress || order.delivery_address?.address || ''}`).openPopup();
+    return () => map.remove();
+  }, [order]);
+  return <div ref={element} className="h-64 w-full overflow-hidden rounded-2xl border border-slate-200" />;
+}
+
 function Orders({ result, riders = [], role, onRefresh, notify }) {
   const orders = result?.orders || [];
-  const update = async (orderId, payload) => { try { await api.put(`/api/admin/orders/${orderId}/status`, payload); notify('Order updated.'); onRefresh(); } catch (error) { notify(error.message, 'error'); } };
-  return <div className="space-y-5"><div className="flex items-start justify-between"><div><h2 className="section-title">Order Management</h2><p className="text-xs text-slate-500">Live order queue and rider assignments.</p></div><button onClick={onRefresh} className="secondary-button"><i className="fa-solid fa-rotate mr-1" /> Refresh</button></div><DataTable rows={orders} emptyText="No orders in the queue." columns={[{ key: 'order_id', label: 'Order' }, { key: 'customer_name', label: 'Customer', render: (row) => <div><b>{row.customer_name || 'Guest'}</b><small className="block text-slate-400">{row.customer_phone}</small></div> }, { key: 'total_amount', label: 'Amount', render: (row) => formatCurrency(row.total_amount) }, { key: 'order_status', label: 'Status', render: (row) => <StatusBadge status={row.order_status} /> }, { key: 'rider_id', label: 'Assign rider', render: (row) => <select value={row.rider_id || ''} onChange={(event) => event.target.value && update(row.order_id, { rider_id: event.target.value })} className="max-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold"><option value="">Unassigned</option>{riders.map((rider) => <option key={rider.rider_id} value={rider.rider_id}>{rider.name}</option>)}</select> }, { key: 'createdAt', label: 'Created', render: (row) => formatDateTime(row.createdAt || row.created_at) }, { key: 'actions', label: 'Actions', render: (row) => <select value={row.order_status || 'Received'} onChange={(event) => update(row.order_id, { order_status: event.target.value })} className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold"><option>Received</option><option>Confirmed</option><option>Preparing</option><option>Ready</option><option>Out for Delivery</option><option>Delivered</option><option>Cancelled</option></select> }]} /></div>;
+  const [selectedOrder, setSelectedOrder] = useState(null);
+  const update = async (orderId, payload) => {
+    try {
+      await api.put(`/api/admin/orders/${orderId}/status`, payload);
+      notify('Order updated successfully.');
+      onRefresh();
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="section-title">Order Management</h2>
+          <p className="text-xs text-slate-500">Live order queue, customer delivery details, and rider assignments.</p>
+        </div>
+        <button onClick={onRefresh} className="secondary-button">
+          <i className="fa-solid fa-rotate mr-1" /> Refresh
+        </button>
+      </div>
+
+      <DataTable
+        rows={orders}
+        emptyText="No orders in the queue."
+        columns={[
+          { key: 'order_id', label: 'Order', render: (row) => <span className="font-mono font-bold text-slate-900">{row.order_id}</span> },
+          {
+            key: 'customer_name',
+            label: 'Customer',
+            render: (row) => (
+              <div>
+                <b>{row.customer?.name || row.customer_name || 'Guest'}</b>
+                <small className="block text-slate-400">{row.customer?.phone || row.customer_phone}</small>
+              </div>
+            )
+          },
+          {
+            key: 'delivery_details',
+            label: 'Delivery Address',
+            render: (row) => {
+              const isPickup = (row.orderType === 'PICKUP' || row.delivery_type === 'Pickup');
+              if (isPickup) return <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-bold text-slate-700">🏪 Pickup (DHA Branch)</span>;
+              const addr = row.deliveryAddress?.formattedAddress || row.delivery_address?.address || 'Phase 5 DHA, Lahore';
+              return (
+                <div className="max-w-[200px] text-xs">
+                  <p className="line-clamp-2 text-[11px] font-medium text-slate-700">{addr}</p>
+                  {row.deliveryAddress?.landmark && <span className="block text-[10px] text-amber-700">📌 Near: {row.deliveryAddress.landmark}</span>}
+                  {row.deliveryAddress?.instructions && <span className="block text-[10px] text-slate-500">📝 {row.deliveryAddress.instructions}</span>}
+                </div>
+              );
+            }
+          },
+          {
+            key: 'location_status',
+            label: 'Location',
+            render: (row) => {
+              const isPickup = (row.orderType === 'PICKUP' || row.delivery_type === 'Pickup');
+              if (isPickup) return <span className="rounded bg-slate-100 px-2 py-0.5 text-[10px] font-medium text-slate-600">Store Pickup</span>;
+              const lat = row.deliveryLocation?.latitude ?? row.delivery_address?.lat;
+              const lng = row.deliveryLocation?.longitude ?? row.delivery_address?.lng;
+              if (lat !== undefined && lat !== null && lng !== undefined && lng !== null) {
+                return (
+                  <div className="flex items-center gap-1.5">
+                    <span className="inline-flex items-center gap-1 rounded-full bg-emerald-50 px-2 py-0.5 text-[10px] font-bold text-emerald-700">
+                      <i className="fa-solid fa-circle-check text-[9px]" /> Verified
+                    </span>
+                    <button onClick={() => setSelectedOrder(row)} className="rounded p-1 text-xs text-blue-600 hover:bg-blue-50" title="View Customer Location">
+                      <i className="fa-solid fa-map-location-dot" />
+                    </button>
+                  </div>
+                );
+              }
+              return (
+                <span className="inline-flex items-center gap-1 rounded-full bg-red-50 px-2 py-0.5 text-[10px] font-bold text-red-700">
+                  <i className="fa-solid fa-triangle-exclamation text-[9px]" /> Location Missing
+                </span>
+              );
+            }
+          },
+          { key: 'total_amount', label: 'Amount', render: (row) => formatCurrency(row.total_amount) },
+          { key: 'order_status', label: 'Status', render: (row) => <StatusBadge status={row.order_status} /> },
+          {
+            key: 'rider_id',
+            label: 'Assign rider',
+            render: (row) => {
+              const isHomeDelivery = (row.orderType === 'DELIVERY' || row.delivery_type === 'Home Delivery');
+              const lat = row.deliveryLocation?.latitude ?? row.delivery_address?.lat;
+              const lng = row.deliveryLocation?.longitude ?? row.delivery_address?.lng;
+              const hasLocation = (lat !== undefined && lat !== null && lng !== undefined && lng !== null);
+
+              if (isHomeDelivery && !hasLocation) {
+                return <span className="text-[10px] font-semibold text-red-600" title="Location coordinates are required to dispatch rider">⚠️ Needs Location</span>;
+              }
+
+              return (
+                <select
+                  value={row.rider_id || ''}
+                  onChange={(event) => event.target.value && update(row.order_id, { rider_id: event.target.value })}
+                  className="max-w-[130px] rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold"
+                >
+                  <option value="">Unassigned</option>
+                  {riders.map((rider) => (
+                    <option key={rider.rider_id} value={rider.rider_id}>
+                      {rider.name}
+                    </option>
+                  ))}
+                </select>
+              );
+            }
+          },
+          { key: 'createdAt', label: 'Created', render: (row) => formatDateTime(row.createdAt || row.created_at) },
+          {
+            key: 'actions',
+            label: 'Actions',
+            render: (row) => (
+              <select
+                value={row.order_status || 'RECEIVED'}
+                onChange={(event) => update(row.order_id, { order_status: event.target.value })}
+                className="rounded-lg border border-slate-200 bg-white px-2 py-1.5 text-[10px] font-bold"
+              >
+                <option value="RECEIVED">Received</option>
+                <option value="CONFIRMED">Confirmed</option>
+                <option value="PREPARING">Preparing</option>
+                <option value="READY_FOR_PICKUP">Ready for Pickup</option>
+                <option value="RIDER_ASSIGNED">Rider Assigned</option>
+                <option value="RIDER_ACCEPTED">Rider Accepted</option>
+                <option value="PICKED_UP">Picked Up</option>
+                <option value="OUT_FOR_DELIVERY">Out for Delivery</option>
+                <option value="DELIVERED">Delivered</option>
+                <option value="CANCELLED">Cancelled</option>
+              </select>
+            )
+          }
+        ]}
+      />
+
+      {selectedOrder && (
+        <Modal title={`Customer Delivery Location • #${selectedOrder.order_id}`} onClose={() => setSelectedOrder(null)} wide>
+          <div className="space-y-4">
+            <div className="grid gap-3 rounded-2xl bg-slate-50 p-4 sm:grid-cols-2 text-xs">
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-400">Customer Details</span>
+                <p className="mt-1 font-bold text-slate-800">{selectedOrder.customer?.name || selectedOrder.customer_name}</p>
+                <p className="text-slate-500">{selectedOrder.customer?.phone || selectedOrder.customer_phone}</p>
+              </div>
+              <div>
+                <span className="text-[10px] font-bold uppercase text-slate-400">Delivery Address</span>
+                <p className="mt-1 font-medium text-slate-800">{selectedOrder.deliveryAddress?.formattedAddress || selectedOrder.delivery_address?.address}</p>
+                {selectedOrder.deliveryAddress?.landmark && <p className="text-amber-700">Landmark: {selectedOrder.deliveryAddress.landmark}</p>}
+                {selectedOrder.deliveryAddress?.instructions && <p className="text-slate-500">Instructions: {selectedOrder.deliveryAddress.instructions}</p>}
+              </div>
+            </div>
+            <OrderLocationMap order={selectedOrder} />
+            <div className="flex justify-end">
+              <button onClick={() => setSelectedOrder(null)} className="primary-button">
+                Close
+              </button>
+            </div>
+          </div>
+        </Modal>
+      )}
+    </div>
+  );
 }
 
 function Menu({ result, onRefresh, notify, canEdit }) {
@@ -114,9 +293,101 @@ function Riders({ result, onRefresh, notify, canEdit }) {
 
 function Kitchen({ result, onRefresh, notify }) {
   const orders = result?.orders || [];
-  const update = async (id, status) => { try { await api.put(`/api/admin/orders/${id}/status`, { order_status: status }); notify(`Order moved to ${status}.`); onRefresh(); } catch (error) { notify(error.message, 'error'); } };
-  const border = { Received: 'border-blue-500/80 bg-slate-800/90 shadow-blue-900/20', Confirmed: 'border-indigo-500/80 bg-slate-800/90', Preparing: 'border-amber-500/90 bg-slate-800 ring-1 ring-amber-500/50', Ready: 'border-purple-500/80 bg-slate-800' };
-  return <div className="space-y-5"><div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3"><div className="flex items-center gap-2"><span className="h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500" /><span className="text-xs font-bold uppercase tracking-wider text-slate-300">Live WebSocket Ticket Stream Active</span></div><div className="text-xs font-semibold text-amber-400"><i className="fa-solid fa-bell mr-1" /> Audio Alerts Enabled</div></div><div className="flex items-start justify-between"><div><h2 className="text-lg font-extrabold text-white">Kitchen Ticket Queue</h2><p className="text-xs text-slate-400">Prepare incoming orders in real time.</p></div><button onClick={onRefresh} className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-slate-700"><i className="fa-solid fa-rotate mr-1" /> Refresh Queue</button></div><div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">{orders.map((order) => <article key={order.order_id} className={`flex flex-col justify-between rounded-2xl border-2 p-4 shadow-lg transition-all ${border[order.order_status] || 'border-amber-500/60 bg-slate-800'}`}><div><div className="mb-3 flex items-center justify-between border-b border-slate-700 pb-2"><div><b className="font-mono text-base tracking-wider text-amber-400">{order.order_id}</b><p className="text-[11px] text-slate-400">{order.customer_name} · {formatDateTime(order.createdAt || order.created_at)}</p></div><span className="rounded-full bg-slate-700 px-2.5 py-1 text-xs font-bold text-slate-200">{order.order_status}</span></div><div className="mb-4 space-y-2">{(order.items || []).map((item, index) => <div key={index} className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5"><div className="flex items-center justify-between text-sm font-bold text-slate-100"><span><span className="mr-1 font-mono text-base text-amber-400">{item.quantity}x</span>{item.name}</span><span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-300">{item.size}</span></div>{item.extras?.length > 0 && <div className="mt-1 border-l-2 border-amber-500/40 pl-3 text-xs font-medium text-amber-300/90">{item.extras.join(', ')}</div>}</div>)}</div></div><div className="flex gap-2 border-t border-slate-700/80 pt-2">{order.order_status === 'Received' && <button onClick={() => update(order.order_id, 'Confirmed')} className="w-full rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white hover:bg-indigo-500"><i className="fa-solid fa-check mr-1" /> Accept Ticket</button>}{order.order_status === 'Confirmed' && <button onClick={() => update(order.order_id, 'Preparing')} className="w-full rounded-xl bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500"><i className="fa-solid fa-fire-burner mr-1" /> Start Cooking</button>}{order.order_status === 'Preparing' && <button onClick={() => update(order.order_id, 'Ready')} className="w-full rounded-xl bg-purple-600 py-2.5 text-xs font-bold text-white hover:bg-purple-500"><i className="fa-solid fa-bell mr-1" /> Mark Order Ready</button>}{order.order_status === 'Ready' && <div className="w-full rounded-xl border border-emerald-800/50 bg-emerald-950/40 py-2 text-center text-xs font-semibold text-emerald-400"><i className="fa-solid fa-circle-check mr-1" /> Awaiting Rider Pickup</div>}</div></article>)}</div>{!orders.length && <div className="rounded-2xl border border-slate-700 bg-slate-800/60 py-16 text-center"><i className="fa-solid fa-circle-check mb-3 block text-4xl text-emerald-500" /><h3 className="text-base font-bold text-slate-200">Kitchen Queue is Clear!</h3><p className="mt-1 text-xs text-slate-400">All incoming orders have been prepared.</p></div>}</div>;
+  const update = async (id, status) => {
+    try {
+      await api.put(`/api/admin/orders/${id}/status`, { order_status: status });
+      notify(`Order status moved to ${status}.`);
+      onRefresh();
+    } catch (error) {
+      notify(error.message, 'error');
+    }
+  };
+
+  const isMatching = (status, list) => {
+    const s = String(status || '').toUpperCase().replace(/[\s-]+/g, '_');
+    return list.includes(s);
+  };
+
+  return (
+    <div className="space-y-5">
+      <div className="flex items-center justify-between rounded-2xl border border-slate-800 bg-slate-900/90 px-4 py-3">
+        <div className="flex items-center gap-2">
+          <span className="h-2.5 w-2.5 animate-ping rounded-full bg-emerald-500" />
+          <span className="text-xs font-bold uppercase tracking-wider text-slate-300">Live Kitchen Queue Stream Active</span>
+        </div>
+        <div className="text-xs font-semibold text-amber-400">
+          <i className="fa-solid fa-bell mr-1" /> Orders live
+        </div>
+      </div>
+      <div className="flex items-start justify-between">
+        <div>
+          <h2 className="text-lg font-extrabold text-white">Kitchen Ticket Queue</h2>
+          <p className="text-xs text-slate-400">Prepare incoming customer orders in real time.</p>
+        </div>
+        <button onClick={onRefresh} className="rounded-xl border border-slate-700 bg-slate-800 px-3 py-1.5 text-xs font-bold text-amber-300 hover:bg-slate-700">
+          <i className="fa-solid fa-rotate mr-1" /> Refresh Queue
+        </button>
+      </div>
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4">
+        {orders.map((order) => (
+          <article key={order.order_id} className="flex flex-col justify-between rounded-2xl border-2 border-slate-700/80 bg-slate-800 p-4 shadow-lg transition-all">
+            <div>
+              <div className="mb-3 flex items-center justify-between border-b border-slate-700 pb-2">
+                <div>
+                  <div className="flex items-center gap-1.5">
+                    <b className="font-mono text-base tracking-wider text-amber-400">{order.order_id}</b>
+                    {order.is_updated && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-300 border border-amber-500/50 uppercase tracking-wider">UPDATED</span>}
+                  </div>
+                  <p className="text-[11px] text-slate-400">{order.customer_name} · {formatDateTime(order.createdAt || order.created_at)}</p>
+                </div>
+                <StatusBadge status={order.order_status} />
+              </div>
+              <div className="mb-4 space-y-2">
+                {(order.items || []).map((item, index) => (
+                  <div key={index} className="rounded-xl border border-slate-700/60 bg-slate-900/60 p-2.5">
+                    <div className="flex items-center justify-between text-sm font-bold text-slate-100">
+                      <span><span className="mr-1 font-mono text-base text-amber-400">{item.quantity}x</span>{item.name}</span>
+                      <span className="rounded bg-slate-800 px-2 py-0.5 text-xs font-normal text-slate-300">{item.size}</span>
+                    </div>
+                    {item.extras?.length > 0 && <div className="mt-1 border-l-2 border-amber-500/40 pl-3 text-xs font-medium text-amber-300/90">{item.extras.join(', ')}</div>}
+                  </div>
+                ))}
+              </div>
+            </div>
+            <div className="flex gap-2 border-t border-slate-700/80 pt-2">
+              {isMatching(order.order_status, ['RECEIVED']) && (
+                <button onClick={() => update(order.order_id, 'CONFIRMED')} className="w-full rounded-xl bg-indigo-600 py-2.5 text-xs font-bold text-white hover:bg-indigo-500">
+                  <i className="fa-solid fa-check mr-1" /> Accept Ticket
+                </button>
+              )}
+              {isMatching(order.order_status, ['CONFIRMED']) && (
+                <button onClick={() => update(order.order_id, 'PREPARING')} className="w-full rounded-xl bg-amber-600 py-2.5 text-xs font-bold text-white hover:bg-amber-500">
+                  <i className="fa-solid fa-fire-burner mr-1" /> Start Cooking
+                </button>
+              )}
+              {isMatching(order.order_status, ['PREPARING']) && (
+                <button onClick={() => update(order.order_id, 'READY_FOR_PICKUP')} className="w-full rounded-xl bg-purple-600 py-2.5 text-xs font-bold text-white hover:bg-purple-500">
+                  <i className="fa-solid fa-bell mr-1" /> Mark Ready for Pickup
+                </button>
+              )}
+              {isMatching(order.order_status, ['READY_FOR_PICKUP', 'READY', 'RIDER_ASSIGNED', 'RIDER_ACCEPTED']) && (
+                <div className="w-full rounded-xl border border-emerald-800/50 bg-emerald-950/40 py-2 text-center text-xs font-semibold text-emerald-400">
+                  <i className="fa-solid fa-circle-check mr-1" /> Ready for Rider Pickup
+                </div>
+              )}
+            </div>
+          </article>
+        ))}
+      </div>
+      {!orders.length && (
+        <div className="rounded-2xl border border-slate-700 bg-slate-800/60 py-16 text-center">
+          <i className="fa-solid fa-circle-check mb-3 block text-4xl text-emerald-500" />
+          <h3 className="text-base font-bold text-slate-200">Kitchen Queue is Clear!</h3>
+          <p className="mt-1 text-xs text-slate-400">All incoming orders have been prepared.</p>
+        </div>
+      )}
+    </div>
+  );
 }
 
 function SimpleTablePanel({ type, result }) {
