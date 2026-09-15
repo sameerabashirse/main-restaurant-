@@ -368,7 +368,10 @@ function Kitchen({ result, onRefresh, notify }) {
             <div>
               <div className="mb-3 flex items-center justify-between border-b border-slate-700 pb-2">
                 <div>
-                  <b className="font-mono text-base tracking-wider text-amber-400">{order.order_id}</b>
+                  <div className="flex items-center gap-1.5">
+                    <b className="font-mono text-base tracking-wider text-amber-400">{order.order_id}</b>
+                    {order.is_updated && <span className="rounded bg-amber-500/20 px-1.5 py-0.5 text-[9px] font-extrabold text-amber-300 border border-amber-500/50 uppercase tracking-wider">UPDATED</span>}
+                  </div>
                   <p className="text-[11px] text-slate-400">{order.customer_name} · {formatDateTime(order.createdAt || order.created_at)}</p>
                 </div>
                 <StatusBadge status={order.order_status} />

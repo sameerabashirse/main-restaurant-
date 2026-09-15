@@ -135,8 +135,31 @@ export default function CustomerPage() {
   const [reviewForm, setReviewForm] = useState({ rating: 5, food_quality: 'Excellent', delivery_speed: 'Fast', feedback: '' });
   const [toast, setToast] = useState('');
   const [busy, setBusy] = useState(false);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [confirmedOrder, setConfirmedOrder] = useState(null);
+  const [modifySecRemaining, setModifySecRemaining] = useState(0);
+  const [isModifyingOrder, setIsModifyingOrder] = useState(false);
+  const [isSubmittingModification, setIsSubmittingModification] = useState(false);
   const bottom = useRef(null);
   const total = useMemo(() => cart.reduce((sum, item) => sum + item.price * item.quantity, 0), [cart]);
+
+  // Live countdown timer based on server createdAt timestamp
+  useEffect(() => {
+    if (!confirmedOrder || !confirmedOrder.created_at) {
+      setModifySecRemaining(0);
+      return undefined;
+    }
+    const updateCountdown = () => {
+      const createdAtMs = new Date(confirmedOrder.created_at).getTime();
+      const nowMs = Date.now();
+      const elapsedSec = Math.floor((nowMs - createdAtMs) / 1000);
+      const remainingSec = Math.max(0, 600 - elapsedSec);
+      setModifySecRemaining(remainingSec);
+    };
+    updateCountdown();
+    const interval = setInterval(updateCountdown, 1000);
+    return () => clearInterval(interval);
+  }, [confirmedOrder?.created_at, confirmedOrder?.order_id]);
 
   const [checkoutStep, setCheckoutStep] = useState(null);
   const [checkoutDraft, setCheckoutDraft] = useState({
@@ -426,6 +449,11 @@ export default function CustomerPage() {
 
       setCheckoutStep(null);
       setCart([]);
+      setMenu([]);
+      setCategory(null);
+      setSelectedItem(null);
+      setModal(null);
+      setConfirmedOrder(result.order);
       const newOrderId = result.order.order_id;
       activeOrderRef.current = newOrderId;
       setActiveOrderId(newOrderId);
@@ -439,14 +467,93 @@ export default function CustomerPage() {
         payNotice = `🏦 Bank Transfer: Verification Pending. Our staff will confirm your transfer prior to dispatch.`;
       }
 
-      addMessage(`🎉 Order ${newOrderId} Confirmed! Total: ${formatCurrency(result.order.total_amount)}.\n• Payment Method: ${chosenPayment} (${result.order.payment_status || 'Pending'})\n${payNotice}\n\nWe have sent your order straight to our kitchen!`, false, {
-        buttons: ['Track Live Delivery', 'Explore Food Menu', 'Review Order']
+      addMessage(`🎉 Order ${newOrderId} Confirmed!\n• Order Number: ${newOrderId}\n• Total Amount: ${formatCurrency(result.order.total_amount)}.\n• Payment Method: ${chosenPayment} (${result.order.payment_status || 'Pending'})\n${payNotice}\n\nWe have sent your order straight to our kitchen!`, false, {
+        buttons: ['Modify Order', 'Track Live Delivery', 'Explore Food Menu', 'Review Order']
       });
     } catch (error) {
       addMessage(`❌ Checkout Error: ${error.message}`, false);
       setToast(error.message);
     } finally {
       setBusy(false);
+    }
+  };
+
+  const handleStartModifyOrder = async () => {
+    if (!confirmedOrder && activeOrderId) {
+      try {
+        const res = await api.get(`/api/chat/modify-eligibility/${activeOrderId}?phone=${customer.phone || defaultPhone}`);
+        if (res.order) setConfirmedOrder(res.order);
+      } catch (err) {}
+    }
+    const targetOrder = confirmedOrder;
+    if (!targetOrder) {
+      setToast('No active order found to modify.');
+      return;
+    }
+    setBusy(true);
+    try {
+      const res = await api.get(`/api/chat/modify-eligibility/${targetOrder.order_id}?phone=${customer.phone || defaultPhone}`);
+      if (!res.eligible) {
+        addMessage(`⚠️ ${res.message || 'Order cannot be modified.'}`, false);
+        setToast(res.message);
+        return;
+      }
+      setIsModifyingOrder(true);
+      const currentItems = (res.order?.items || targetOrder.items || []).map((item) => ({
+        item_id: item.item_id,
+        name: item.name,
+        quantity: item.quantity,
+        size: item.size || 'Medium',
+        extras: item.extras || [],
+        price: Number(item.unit_price || item.total_price / item.quantity || 0)
+      }));
+      setCart(currentItems);
+      loadMenu();
+      addMessage(`✏️ Modifying Order #${targetOrder.order_id}. You can add more items, change quantities, or select customizations below.`, false);
+    } catch (err) {
+      setToast(err.message);
+    } finally {
+      setBusy(false);
+    }
+  };
+
+  const handleCancelModification = () => {
+    setIsModifyingOrder(false);
+    setCart([]);
+    setMenu([]);
+    setCategory(null);
+    addMessage('❌ Order modifications cancelled. Your original confirmed order remains unchanged.', false);
+  };
+
+  const handleSaveUpdatedOrder = async () => {
+    if (!confirmedOrder || isSubmittingModification) return;
+    if (!cart.length) {
+      setToast('Cart cannot be empty.');
+      return;
+    }
+    setIsSubmittingModification(true);
+    try {
+      const res = await api.put(`/api/chat/modify-order/${confirmedOrder.order_id}`, {
+        customer_phone: customer.phone || defaultPhone,
+        items: cart
+      });
+      if (!res.success) throw new Error(res.message);
+
+      setConfirmedOrder(res.order);
+      setIsModifyingOrder(false);
+      setCart([]);
+      setMenu([]);
+      setCategory(null);
+      setToast('Your order has been updated successfully.');
+
+      addMessage(`🎉 Your order has been updated successfully!\n• Order Number: ${res.order.order_id}\n• Previous Total: ${formatCurrency(res.previous_total)}\n• Additional Amount: ${formatCurrency(res.additional_amount)}\n• Updated Final Total: ${formatCurrency(res.updated_total)}\n• Payment Method: ${res.order.payment_method || 'Cash on Delivery'}`, false, {
+        buttons: ['Modify Order', 'Track Live Delivery', 'Review Order']
+      });
+    } catch (err) {
+      setToast(err.message);
+      addMessage(`⚠️ ${err.message}`, false);
+    } finally {
+      setIsSubmittingModification(false);
     }
   };
 
@@ -713,14 +820,32 @@ export default function CustomerPage() {
   };
 
   const confirmAdd = () => {
+    if (isAddingToCart || !selectedItem) return;
+    setIsAddingToCart(true);
+
     const sizeOptions = selectedItem.customization?.sizes || selectedItem.sizes || [];
     const size = sizeOptions.find((entry) => entry.name === wizard.size);
     const extrasOptions = selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || [];
     const extras = extrasOptions.filter((entry) => wizard.extras.includes(entry.name));
     const price = Number(size?.price ?? selectedItem.price) + extras.reduce((sum, entry) => sum + Number(entry.price || 0), 0);
+    const itemCat = selectedItem.category;
+
     setCart((old) => [...old, { item_id: selectedItem._id, name: selectedItem.name, quantity: 1, size: wizard.size, extras: wizard.extras, price }]);
+
+    // Close only the customization modal
     setModal(null);
-    addMessage(`${selectedItem.name} added to your cart. Total: ${formatCurrency(price)}.`, false, { buttons: ['Proceed to Checkout', 'View Menu'] });
+    setSelectedItem(null);
+
+    // Return/keep customer on the same category
+    if (itemCat) setCategory(itemCat);
+
+    // Small confirmation message
+    setToast('Item added to your cart successfully.');
+    addMessage(`Item added to your cart successfully.\n• ${selectedItem.name} (${wizard.size || 'Regular'}) - ${formatCurrency(price)}`, false, { buttons: ['Proceed to Checkout', 'View Menu'] });
+
+    setTimeout(() => {
+      setIsAddingToCart(false);
+    }, 500);
   };
 
   const checkout = () => {
@@ -768,7 +893,9 @@ export default function CustomerPage() {
   const updateCartQuantity = (index, delta) => setCart((old) => old.map((item, itemIndex) => itemIndex === index ? { ...item, quantity: Math.max(0, item.quantity + delta) } : item).filter((item) => item.quantity > 0));
 
   const handleButtonClick = (button) => {
-    if (button.includes('Location') && !button.includes('Share') && !button.includes('Pin') && !button.includes('Change')) {
+    if (button.includes('Modify Order')) {
+      handleStartModifyOrder();
+    } else if (button.includes('Location') && !button.includes('Share') && !button.includes('Pin') && !button.includes('Change')) {
       showLocation();
     } else if (button.includes('Reorder') || button.includes('Same')) {
       reorder();
@@ -797,14 +924,49 @@ export default function CustomerPage() {
         <div className="relative flex h-[100dvh] w-full flex-col overflow-hidden border border-slate-200 bg-white shadow-2xl sm:h-[840px] sm:w-[410px] sm:rounded-[40px] sm:border-slate-800 sm:ring-[12px] sm:ring-slate-900">
           <div className="hidden h-6 w-full items-center justify-center bg-[#075e54] sm:flex"><div className="h-4 w-28 rounded-b-xl bg-black" /></div>
           <div className="flex shrink-0 items-center justify-between gap-2.5 bg-[#075e54] px-3.5 py-2.5 text-white shadow-sm"><div className="flex min-w-0 items-center gap-2.5"><div className="relative flex h-10 w-10 shrink-0 items-center justify-center rounded-full bg-emerald-800 text-lg text-white shadow-inner"><i className="fa-solid fa-utensils" /><span className="absolute bottom-0 right-0 h-3 w-3 rounded-full border-2 border-[#075e54] bg-[#25d366]" /></div><div className="min-w-0"><div className="flex items-center gap-1.5"><h2 className="truncate text-sm font-bold">FeastFlow Restaurant</h2><i className="fa-solid fa-circle-check text-xs text-[#25d366]" /></div><p className="truncate text-[11px] font-medium text-emerald-200">🟢 Online • {customer.name || 'AI Assistant'} ({customer.customer_level || 'AI Assistant'})</p></div></div><button onClick={() => { setMessages([{ text: 'Chat reset. What would you like to order today?', buttons: ['View Menu'] }]); setCart([]); setCheckoutStep(null); }} className="rounded-full p-2 text-white/90 transition hover:bg-white/10 hover:text-white" aria-label="Reset chat"><i className="fa-solid fa-rotate-right text-xs" /></button></div>
-          <div className="wa-chat-texture flex-1 overflow-y-auto p-3.5">{messages.map((message, index) => <Bubble key={`${index}-${message.text}`} mine={message.mine}>{message.infoCard ? <><div className="mb-2 flex items-center gap-2 font-bold text-red-900"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-900 text-xs text-amber-300"><i className="fa-solid fa-utensils" /></span>FeastFlow Restaurant</div><div className="space-y-1 text-xs text-slate-700"><div>📍 <b>DHA Lahore Branch</b> (Phase 5 Commercial)</div><div>🕒 12:00 PM - 12:00 AM Daily</div><div>🚚 Fast Delivery (DHA, Gulberg, Cantt)</div><div>⭐ 4.8 Rating (1,240 Reviews)</div></div></> : message.returning ? <><b className="text-sm text-emerald-900">👋 {message.text}</b><span className="mt-1 block text-xs font-semibold text-amber-800">⭐ {message.loyalty} Points ({message.level})</span><span className="mt-1 block text-xs text-slate-600">Last Order: <b>{message.lastOrder}</b></span></> : <span className="whitespace-pre-line">{message.text}</span>}{message.buttons && <div className="mt-3 grid gap-2">{message.buttons.map((button) => <button key={button} onClick={() => handleButtonClick(button)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-100">{button}<i className="fa-solid fa-chevron-right float-right mt-0.5 text-[9px]" /></button>)}</div>}{message.menu && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{categories.map((item) => <button key={item._id || item.name} onClick={() => setCategory(item.name)} className="rounded-xl bg-amber-50 p-2 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-amber-100">{item.icon || '🍽️'} {item.name}</button>)}</div>}</Bubble>) }{menu.length > 0 && <div className="mb-3 grid gap-3 sm:grid-cols-2">{visibleMenu.map((item) => <div key={item._id} className="overflow-hidden rounded-2xl bg-white shadow-sm"><img src={item.image} alt="" className="h-28 w-full object-cover" /><div className="p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-slate-800">{item.name}</p><p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{item.description}</p></div><b className="whitespace-nowrap text-xs text-red-900">{formatCurrency(item.price)}</b></div><button onClick={() => openCustomizer(item)} className="mt-3 w-full rounded-lg bg-red-900 py-2 text-[10px] font-bold text-white hover:bg-red-800">Customize & Add</button></div></div>)}</div>}{busy && <Bubble><span className="text-slate-400">FeastFlow is typing…</span></Bubble>}<div ref={bottom} /></div>
+          <div className="wa-chat-texture flex-1 overflow-y-auto p-3.5">
+            {isModifyingOrder && confirmedOrder && (
+              <div className="sticky top-0 z-10 mb-3.5 rounded-2xl border-2 border-amber-400 bg-amber-50 p-3 shadow-lg backdrop-blur">
+                <div className="flex items-center justify-between text-xs font-extrabold text-amber-950">
+                  <span>✏️ Modifying Order #{confirmedOrder.order_id}</span>
+                  <span className="font-mono text-amber-800">⏱️ {Math.floor(modifySecRemaining / 60).toString().padStart(2, '0')}:{(modifySecRemaining % 60).toString().padStart(2, '0')}</span>
+                </div>
+                <div className="mt-2 space-y-1 text-[11px] font-medium text-slate-700">
+                  <div className="flex justify-between"><span>Previous Order Total:</span><b>{formatCurrency(confirmedOrder.total_amount)}</b></div>
+                  <div className="flex justify-between"><span>Updated Cart Total:</span><b>{formatCurrency(total)}</b></div>
+                  <div className="flex justify-between border-t border-amber-200/80 pt-1 text-red-900 font-bold"><span>Additional Amount:</span><span>{formatCurrency(Math.max(0, total - confirmedOrder.total_amount))}</span></div>
+                </div>
+                <div className="mt-3 flex gap-2">
+                  <button onClick={handleSaveUpdatedOrder} disabled={isSubmittingModification} className="flex-1 rounded-xl bg-red-900 py-2 text-xs font-extrabold text-white shadow hover:bg-red-800 disabled:opacity-50">
+                    {isSubmittingModification ? 'Saving Updated Order…' : 'Save Updated Order'}
+                  </button>
+                  <button onClick={handleCancelModification} className="rounded-xl border border-slate-300 bg-white px-3 py-2 text-xs font-bold text-slate-700 hover:bg-slate-100">
+                    Cancel Changes
+                  </button>
+                </div>
+              </div>
+            )}
+            {!isModifyingOrder && confirmedOrder && modifySecRemaining > 0 && (
+              <div className="mb-3 flex items-center justify-between rounded-xl border border-amber-300/90 bg-amber-50/90 px-3 py-2 text-xs text-amber-900 shadow-xs">
+                <span className="font-semibold">⏱️ Modify Order available for {Math.floor(modifySecRemaining / 60).toString().padStart(2, '0')}:{(modifySecRemaining % 60).toString().padStart(2, '0')}</span>
+                <button onClick={handleStartModifyOrder} className="rounded-lg bg-amber-600 px-2.5 py-1 text-[10px] font-bold text-white shadow-2xs hover:bg-amber-700">
+                  Modify Order
+                </button>
+              </div>
+            )}
+            {!isModifyingOrder && confirmedOrder && modifySecRemaining === 0 && (
+              <div className="mb-3 rounded-xl border border-slate-200 bg-slate-50 px-3 py-1.5 text-[11px] font-medium text-slate-500">
+                ⏱️ The order modification window has expired.
+              </div>
+            )}
+            {messages.map((message, index) => <Bubble key={`${index}-${message.text}`} mine={message.mine}>{message.infoCard ? <><div className="mb-2 flex items-center gap-2 font-bold text-red-900"><span className="flex h-6 w-6 items-center justify-center rounded-full bg-red-900 text-xs text-amber-300"><i className="fa-solid fa-utensils" /></span>FeastFlow Restaurant</div><div className="space-y-1 text-xs text-slate-700"><div>📍 <b>DHA Lahore Branch</b> (Phase 5 Commercial)</div><div>🕒 12:00 PM - 12:00 AM Daily</div><div>🚚 Fast Delivery (DHA, Gulberg, Cantt)</div><div>⭐ 4.8 Rating (1,240 Reviews)</div></div></> : message.returning ? <><b className="text-sm text-emerald-900">👋 {message.text}</b><span className="mt-1 block text-xs font-semibold text-amber-800">⭐ {message.loyalty} Points ({message.level})</span><span className="mt-1 block text-xs text-slate-600">Last Order: <b>{message.lastOrder}</b></span></> : <span className="whitespace-pre-line">{message.text}</span>}{message.buttons && <div className="mt-3 grid gap-2">{message.buttons.map((button) => <button key={button} onClick={() => handleButtonClick(button)} className="rounded-lg border border-emerald-200 bg-emerald-50 px-3 py-2 text-left text-[11px] font-bold text-emerald-800 transition hover:bg-emerald-100">{button}<i className="fa-solid fa-chevron-right float-right mt-0.5 text-[9px]" /></button>)}</div>}{message.menu && <div className="mt-3 grid grid-cols-2 gap-2 sm:grid-cols-3">{categories.map((item) => <button key={item._id || item.name} onClick={() => setCategory(item.name)} className="rounded-xl bg-amber-50 p-2 text-[11px] font-bold text-slate-700 shadow-sm transition hover:bg-amber-100">{item.icon || '🍽️'} {item.name}</button>)}</div>}</Bubble>) }{menu.length > 0 && <div className="mb-3 grid gap-3 sm:grid-cols-2">{visibleMenu.map((item) => <div key={item._id} className="overflow-hidden rounded-2xl bg-white shadow-sm"><img src={item.image} alt="" className="h-28 w-full object-cover" /><div className="p-3"><div className="flex items-start justify-between gap-2"><div><p className="text-xs font-bold text-slate-800">{item.name}</p><p className="mt-1 line-clamp-2 text-[10px] text-slate-500">{item.description}</p></div><b className="whitespace-nowrap text-xs text-red-900">{formatCurrency(item.price)}</b></div><button onClick={() => openCustomizer(item)} className="mt-3 w-full rounded-lg bg-red-900 py-2 text-[10px] font-bold text-white hover:bg-red-800">Customize & Add</button></div></div>)}</div>}{busy && <Bubble><span className="text-slate-400">FeastFlow is typing…</span></Bubble>}<div ref={bottom} /></div>
           <div className="flex shrink-0 items-center gap-1.5 overflow-x-auto border-t border-slate-200/90 bg-slate-100 px-2.5 py-2">{[['Menu', 'fa-utensils'], ['Cart', 'fa-basket-shopping'], ['Location', 'fa-location-dot'], ['Track', 'fa-box'], ['Rewards', 'fa-gift']].map(([label, icon]) => <button key={label} onClick={() => label === 'Menu' ? loadMenu() : label === 'Cart' ? startConversationalCheckout() : label === 'Location' ? showLocation() : label === 'Track' ? openTrackPrompt() : addMessage(`You have ${customer.loyalty_points || 0} loyalty points. Your current level is ${customer.customer_level || 'New Customer'}.`)} className="flex shrink-0 items-center gap-1 whitespace-nowrap rounded-full border border-slate-200 bg-white px-3 py-1.5 text-xs font-semibold text-[#075e54] shadow-sm hover:bg-emerald-50">{label === 'Menu' ? '🍕' : label === 'Cart' ? '🛒' : label === 'Location' ? '📍' : label === 'Track' ? '📦' : '⭐'} {label}</button>)}</div>
           <div className="flex shrink-0 items-center gap-2 border-t border-slate-200 bg-slate-100 p-2"><input value={input} onChange={(event) => setInput(event.target.value)} onKeyDown={(event) => event.key === 'Enter' && sendMessage()} placeholder={checkoutStep ? "Type your response..." : "Ask about menu or place order..."} className="flex-1 rounded-full border border-slate-200 bg-white px-4 py-2 text-xs shadow-inner outline-none focus:ring-2 focus:ring-emerald-600" /><button onClick={() => sendMessage()} className="flex h-9 w-9 shrink-0 items-center justify-center rounded-full bg-[#00a884] text-white shadow-sm hover:bg-[#008f6f]" aria-label="Send message"><i className="fa-solid fa-paper-plane text-xs" /></button></div>
           {cart.length > 0 && <button onClick={startConversationalCheckout} className="flex shrink-0 items-center justify-between border-t-2 border-[#25d366] bg-[#075e54] px-4 py-2.5 text-white shadow-lg transition hover:bg-[#064e47]"><span className="flex items-center gap-2 text-xs"><i className="fa-solid fa-basket-shopping text-sm text-emerald-300" /><b>{cart.reduce((sum, item) => sum + item.quantity, 0)} Item{cart.reduce((sum, item) => sum + item.quantity, 0) > 1 ? 's' : ''}</b><span className="text-emerald-300">|</span><strong className="text-sm">{formatCurrency(total)}</strong></span><span className="rounded-full bg-[#25d366] px-3.5 py-1.5 text-xs font-extrabold text-slate-900">Checkout <i className="fa-solid fa-chevron-right ml-1 text-[10px]" /></span></button>}
         </div>
       </main>
       {toast && <Toast message={toast} tone="error" onClose={() => setToast('')} />}
-      {modal === 'customize' && selectedItem && <Modal title={`Customize ${selectedItem.name}`} onClose={() => setModal(null)}><div className="space-y-4">{(selectedItem.customization?.flavours || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose flavour</label><select className="input-control" value={wizard.flavour} onChange={(event) => setWizard({ ...wizard, flavour: event.target.value })}>{selectedItem.customization.flavours.map((value) => <option key={value}>{value}</option>)}</select></div>}<div><label className="mb-2 block text-xs font-bold text-slate-700">Choose size</label><div className="grid grid-cols-2 gap-2">{(selectedItem.customization?.sizes || selectedItem.sizes || []).map((value) => <button key={value.name} onClick={() => setWizard({ ...wizard, size: value.name })} className={`rounded-xl border px-3 py-2 text-xs font-bold ${wizard.size === value.name ? 'border-red-900 bg-red-50 text-red-900' : 'border-slate-200 text-slate-600'}`}>{value.name}<span className="mt-1 block text-[10px] font-normal">{formatCurrency(value.price)}</span></button>)}</div></div>{(selectedItem.customization?.crusts || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose crust</label><select className="input-control" value={wizard.crust} onChange={(event) => setWizard({ ...wizard, crust: event.target.value })}>{selectedItem.customization.crusts.map((value) => <option key={value.name}>{value.name}</option>)}</select></div>}{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Add extras</label>{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).map((value) => <label key={value.name} className="flex items-center justify-between border-b border-slate-100 py-2 text-xs"><span>{value.name} <small className="text-slate-400">+{formatCurrency(value.price)}</small></span><input type="checkbox" checked={wizard.extras.includes(value.name)} onChange={(event) => setWizard({ ...wizard, extras: event.target.checked ? [...wizard.extras, value.name] : wizard.extras.filter((name) => name !== value.name) })} /></label>)}</div>}<button onClick={confirmAdd} className="primary-button w-full">Add to cart</button></div></Modal>}
+      {modal === 'customize' && selectedItem && <Modal title={`Customize ${selectedItem.name}`} onClose={() => setModal(null)}><div className="space-y-4">{(selectedItem.customization?.flavours || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose flavour</label><select className="input-control" value={wizard.flavour} onChange={(event) => setWizard({ ...wizard, flavour: event.target.value })}>{selectedItem.customization.flavours.map((value) => <option key={value}>{value}</option>)}</select></div>}<div><label className="mb-2 block text-xs font-bold text-slate-700">Choose size</label><div className="grid grid-cols-2 gap-2">{(selectedItem.customization?.sizes || selectedItem.sizes || []).map((value) => <button key={value.name} onClick={() => setWizard({ ...wizard, size: value.name })} className={`rounded-xl border px-3 py-2 text-xs font-bold ${wizard.size === value.name ? 'border-red-900 bg-red-50 text-red-900' : 'border-slate-200 text-slate-600'}`}>{value.name}<span className="mt-1 block text-[10px] font-normal">{formatCurrency(value.price)}</span></button>)}</div></div>{(selectedItem.customization?.crusts || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Choose crust</label><select className="input-control" value={wizard.crust} onChange={(event) => setWizard({ ...wizard, crust: event.target.value })}>{selectedItem.customization.crusts.map((value) => <option key={value.name}>{value.name}</option>)}</select></div>}{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).length > 0 && <div><label className="mb-2 block text-xs font-bold text-slate-700">Add extras</label>{(selectedItem.customization?.extras || selectedItem.customization?.addons || selectedItem.extras || []).map((value) => <label key={value.name} className="flex items-center justify-between border-b border-slate-100 py-2 text-xs"><span>{value.name} <small className="text-slate-400">+{formatCurrency(value.price)}</small></span><input type="checkbox" checked={wizard.extras.includes(value.name)} onChange={(event) => setWizard({ ...wizard, extras: event.target.checked ? [...wizard.extras, value.name] : wizard.extras.filter((name) => name !== value.name) })} /></label>)}</div>}<button onClick={confirmAdd} disabled={isAddingToCart} className="primary-button w-full">{isAddingToCart ? 'Adding to cart…' : 'Add to Order'}</button></div></Modal>}
       {modal === 'review' && <Modal title="Review your order" onClose={() => setModal(null)}><form onSubmit={submitReview} className="space-y-3"><label className="block text-xs font-bold text-slate-700">Rating<select className="input-control mt-1" value={reviewForm.rating} onChange={(event) => setReviewForm({ ...reviewForm, rating: event.target.value })}>{[5, 4, 3, 2, 1].map((value) => <option key={value} value={value}>{'⭐'.repeat(value)} ({value}/5)</option>)}</select></label><label className="block text-xs font-bold text-slate-700">Food quality<select className="input-control mt-1" value={reviewForm.food_quality} onChange={(event) => setReviewForm({ ...reviewForm, food_quality: event.target.value })}><option>Excellent</option><option>Good</option><option>Average</option><option>Poor</option></select></label><label className="block text-xs font-bold text-slate-700">Delivery speed<select className="input-control mt-1" value={reviewForm.delivery_speed} onChange={(event) => setReviewForm({ ...reviewForm, delivery_speed: event.target.value })}><option>Fast</option><option>On time</option><option>Slow</option></select></label><label className="block text-xs font-bold text-slate-700">Feedback<textarea className="input-control mt-1" rows="3" value={reviewForm.feedback} onChange={(event) => setReviewForm({ ...reviewForm, feedback: event.target.value })} /></label><button className="primary-button w-full">Submit review</button></form></Modal>}
       {modal === 'track' && <Modal title="Live Delivery Tracking" onClose={() => setModal(null)} wide><form onSubmit={findOrder} className="mb-4 flex gap-2"><input name="query" defaultValue={activeOrderId || customer.phone || defaultPhone} placeholder="Order ID or phone number" className="input-control" required /><button className="primary-button">{busy ? 'Searching…' : 'Track'}</button></form>{track ? <div className="space-y-3"><div className="grid grid-cols-3 gap-2 rounded-2xl border border-slate-200 bg-slate-50 p-3 text-xs"><div><div className="text-[10px] uppercase text-slate-400">Order ID</div><b>{track.order?.order_id}</b></div><div><div className="text-[10px] uppercase text-slate-400">Status</div><b className="text-emerald-700">{track.order?.order_status}</b></div><div><div className="text-[10px] uppercase text-slate-400">Assigned Rider</div><b>{track.rider?.name || track.order?.rider_name || 'Rider Ali'}</b></div></div><MapPanel track={track} riderLocation={riderLocation} lastUpdated={lastLocationTime} />{track.rider && <p className="text-xs text-slate-600"><i className="fa-solid fa-motorcycle mr-2 text-red-900" />{track.rider.name} · {track.rider.phone}</p>}</div> : <p className="py-8 text-center text-xs text-slate-500">Enter an order ID or phone number to see live status.</p>}</Modal>}
     </div>

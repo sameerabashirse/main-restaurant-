@@ -117,6 +117,13 @@ const orderSchema = new mongoose.Schema({
   estimated_delivery_time: { type: String, default: '30-40 mins' },
   is_reviewed: { type: Boolean, default: false },
   is_delivery_processed: { type: Boolean, default: false },
+  is_updated: { type: Boolean, default: false },
+  modification_history: [{
+    modified_at: { type: Date, default: Date.now },
+    previous_total: { type: Number },
+    new_total: { type: Number },
+    items_count: { type: Number }
+  }],
   whatsapp_notification_sent: { type: Boolean, default: true },
   created_at: { type: Date, default: Date.now },
   updated_at: { type: Date, default: Date.now }

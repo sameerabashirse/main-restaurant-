@@ -318,6 +318,160 @@ router.post('/checkout', async (req, res) => {
   }
 });
 
+// GET /api/chat/modify-eligibility/:order_id - Check 10-minute modification window and order status
+router.get('/modify-eligibility/:order_id', async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    const { phone } = req.query;
+
+    const order = await Order.findOne({ order_id });
+    if (!order) {
+      return res.status(404).json({ success: false, eligible: false, message: 'Order not found.' });
+    }
+
+    if (phone) {
+      const cleanReqPhone = String(phone).replace(/\D/g, '');
+      const cleanOrderPhone = String(order.customer_phone || '').replace(/\D/g, '');
+      if (cleanReqPhone && cleanOrderPhone && !cleanOrderPhone.includes(cleanReqPhone) && !cleanReqPhone.includes(cleanOrderPhone)) {
+        return res.status(403).json({ success: false, eligible: false, message: 'Order ownership validation failed.' });
+      }
+    }
+
+    const now = Date.now();
+    const createdAt = new Date(order.created_at || order.createdAt || Date.now()).getTime();
+    const isSimulatedExpired = req.query.simulate_expired === 'true';
+    const elapsedMs = isSimulatedExpired ? (11 * 60 * 1000) : Math.max(0, now - createdAt);
+    const windowMs = 10 * 60 * 1000;
+    const remainingSeconds = Math.max(0, Math.floor((windowMs - elapsedMs) / 1000));
+    const isExpired = elapsedMs > windowMs;
+
+    const currentStatus = normalizeOrderStatus(order.order_status);
+    const lockedStatuses = ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'READY_FOR_PICKUP', 'PICKED_UP'];
+    const isLocked = lockedStatuses.includes(currentStatus);
+
+    let message = 'Eligible for modification';
+    if (isExpired) {
+      message = 'The 10-minute modification window has expired. Please contact the restaurant for assistance.';
+    } else if (isLocked) {
+      message = 'Your order is already being prepared and can no longer be modified.';
+    }
+
+    res.json({
+      success: true,
+      eligible: !isExpired && !isLocked,
+      remaining_seconds: remainingSeconds,
+      is_expired: isExpired,
+      is_locked: isLocked,
+      order_status: currentStatus,
+      message,
+      server_time: new Date(),
+      created_at: order.created_at,
+      order
+    });
+  } catch (err) {
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
+// PUT /api/chat/modify-order/:order_id - Update existing order atomically within 10 mins
+router.put('/modify-order/:order_id', async (req, res) => {
+  try {
+    const { order_id } = req.params;
+    const { customer_phone, items } = req.body;
+
+    if (!items || !Array.isArray(items) || items.length === 0) {
+      return res.status(400).json({ success: false, message: 'Cart items are required for order modification.' });
+    }
+
+    const order = await Order.findOne({ order_id });
+    if (!order) {
+      return res.status(404).json({ success: false, message: 'Order not found.' });
+    }
+
+    // 1. Ownership Validation
+    if (customer_phone) {
+      const cleanReqPhone = String(customer_phone).replace(/\D/g, '');
+      const cleanOrderPhone = String(order.customer_phone || '').replace(/\D/g, '');
+      if (cleanReqPhone && cleanOrderPhone && !cleanOrderPhone.includes(cleanReqPhone) && !cleanReqPhone.includes(cleanOrderPhone)) {
+        return res.status(403).json({ success: false, message: 'Order ownership validation failed.' });
+      }
+    }
+
+    // 2. Server-Recorded 10-Minute Expiry Check
+    const now = Date.now();
+    const createdAt = new Date(order.created_at || order.createdAt || Date.now()).getTime();
+    const isSimulatedExpired = req.query.simulate_expired === 'true';
+    const elapsedMs = isSimulatedExpired ? (11 * 60 * 1000) : Math.max(0, now - createdAt);
+    const windowMs = 10 * 60 * 1000;
+
+    if (elapsedMs > windowMs) {
+      return res.status(400).json({
+        success: false,
+        expired: true,
+        message: 'The 10-minute modification window has expired. Please contact the restaurant for assistance.'
+      });
+    }
+
+    // 3. Order Status Safety Check
+    const currentStatus = normalizeOrderStatus(order.order_status);
+    const lockedStatuses = ['OUT_FOR_DELIVERY', 'DELIVERED', 'CANCELLED', 'READY_FOR_PICKUP', 'PICKED_UP'];
+    if (lockedStatuses.includes(currentStatus)) {
+      return res.status(400).json({
+        success: false,
+        locked: true,
+        message: 'Your order is already being prepared and can no longer be modified.'
+      });
+    }
+
+    // 4. Server-Side Price & Item Recalculation
+    const { processedItems, totalAmount } = await validateAndCalculateCart(items);
+
+    const previousTotal = order.total_amount;
+    const additionalAmount = Math.max(0, totalAmount - previousTotal);
+
+    // 5. Atomic Order Update (Preserves same order_id, customer, address, payment)
+    order.items = processedItems;
+    order.total_amount = totalAmount;
+    order.is_updated = true;
+    order.updated_at = new Date();
+
+    if (!order.modification_history) order.modification_history = [];
+    order.modification_history.push({
+      modified_at: new Date(),
+      previous_total: previousTotal,
+      new_total: totalAmount,
+      items_count: processedItems.length
+    });
+
+    await order.save();
+
+    // 6. Real-time Kitchen & Staff Socket Notifications
+    const io = getIO(req);
+    if (io) {
+      io.emit('order:updated', order);
+      io.emit('order:modified', {
+        order_id: order.order_id,
+        order,
+        previous_total: previousTotal,
+        new_total: totalAmount,
+        additional_amount: additionalAmount
+      });
+    }
+
+    res.json({
+      success: true,
+      message: 'Your order has been updated successfully.',
+      order,
+      previous_total: previousTotal,
+      additional_amount: additionalAmount,
+      updated_total: totalAmount
+    });
+  } catch (err) {
+    console.error('Modify order error:', err);
+    res.status(500).json({ success: false, message: err.message });
+  }
+});
+
 // GET /api/chat/track
 router.get('/track', async (req, res) => {
   try {

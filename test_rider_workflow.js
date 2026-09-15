@@ -167,6 +167,19 @@ async function runRiderWorkflowTests() {
       'Customer tracking loads correct canonical status and live rider location coordinates'
     );
 
+    // Cash confirmation is required before completing a cash delivery.
+    const beforeCashRes = await request('POST', '/api/rider/status', {
+      rider_id: 'RIDER-101',
+      order_id: orderId,
+      status: 'DELIVERED'
+    }, rider101Token);
+    assert(beforeCashRes.status === 400, 'Cash delivery cannot complete before cash collection');
+
+    const cashRes = await request('POST', '/api/rider/confirm-cash', {
+      order_id: orderId
+    }, rider101Token);
+    assert(cashRes.status === 200 && cashRes.data.order.cashReceivedByRider === true, 'Rider confirms cash collection before completing delivery');
+
     // 12. Test Step 4: Rider marks delivery complete -> DELIVERED
     const deliveredRes = await request('POST', '/api/rider/status', {
       rider_id: 'RIDER-101',
