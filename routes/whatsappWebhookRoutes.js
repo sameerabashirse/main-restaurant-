@@ -111,7 +111,7 @@ router.post('/webhook', async (req, res) => {
 });
 
 // WhatsApp AI Conversational Logic Engine
-async function processWhatsAppConversation(phone, text, payload) {
+async function processWhatsAppConversation(phone, text, payload = {}) {
   let session = await WhatsAppSession.findOne({ phone });
   let customer = await Customer.findOne({ phone });
 
@@ -119,11 +119,221 @@ async function processWhatsAppConversation(phone, text, payload) {
     session = await WhatsAppSession.create({
       phone,
       name: customer ? customer.name : 'Customer',
-      customer_id: customer ? customer.customer_id : null
+      customer_id: customer ? customer.customer_id : null,
+      checkout_draft: {}
     });
   }
 
-  const cleanText = text.toLowerCase().trim();
+  const cleanText = (text || '').toLowerCase().trim();
+
+  // Reset or Cancellation check
+  if (cleanText === 'cancel' || cleanText === 'start over') {
+    session.checkout_state = null;
+    session.checkout_draft = {};
+    await session.save();
+    return {
+      type: 'interactive_button',
+      body: `❌ Checkout cancelled. How else can I help you today?`,
+      buttons: [
+        { id: 'btn_view_menu', title: '🍕 View Menu' },
+        { id: 'btn_place_order', title: '🛒 Place Order' },
+        { id: 'btn_track', title: '📦 Track Order' }
+      ]
+    };
+  }
+
+  // Handle Location message payload directly
+  if (payload.lat !== undefined && payload.lng !== undefined) {
+    const lat = Number(payload.lat);
+    const lng = Number(payload.lng);
+    if (!isNaN(lat) && !isNaN(lng) && lat >= -90 && lat <= 90 && lng >= -180 && lng <= 180) {
+      session.checkout_draft = session.checkout_draft || {};
+      session.checkout_draft.latitude = lat;
+      session.checkout_draft.longitude = lng;
+      session.checkout_draft.accuracy = payload.accuracy || 10;
+      session.checkout_state = 'AWAITING_DELIVERY_CONFIRMATION';
+      await session.save();
+
+      const d = session.checkout_draft;
+      return {
+        type: 'interactive_button',
+        body: `📍 *Location Coordinates Received!*\nLat: ${lat.toFixed(4)}, Lng: ${lng.toFixed(4)}\n\n📋 *Please confirm your delivery details:*\n• *Name:* ${d.name || customer?.name || 'Customer'}\n• *Phone:* ${d.phone || phone}\n• *House/Flat:* ${d.houseNumber || 'N/A'}\n• *Street:* ${d.streetNumber || 'N/A'}\n• *Area/Society:* ${d.area || 'N/A'}\n• *City:* ${d.city || 'Lahore'}\n• *Landmark:* ${d.landmark || 'None'}\n• *Instructions:* ${d.instructions || 'None'}\n• *Location Status:* ✅ Received (${lat.toFixed(4)}, ${lng.toFixed(4)})`,
+        buttons: [
+          { id: 'btn_confirm_order', title: '✅ Confirm Order' },
+          { id: 'btn_change_address', title: '✏️ Change Address' },
+          { id: 'btn_cancel_checkout', title: '❌ Cancel' }
+        ]
+      };
+    }
+  }
+
+  // Handle active Checkout Conversation States
+  if (session.checkout_state) {
+    const draft = session.checkout_draft || {};
+
+    if (session.checkout_state === 'AWAITING_ORDER_TYPE') {
+      if (cleanText.includes('pickup') || payload.id === 'btn_self_pickup') {
+        draft.orderType = 'PICKUP';
+        session.checkout_state = 'AWAITING_DELIVERY_CONFIRMATION';
+        session.checkout_draft = draft;
+        await session.save();
+
+        const branch = await Branch.findOne({ branch_id: 'BR-DHA' });
+        return {
+          type: 'interactive_button',
+          body: `🏪 *Self Pickup Selected*\n\nPickup Location:\n📍 *${branch ? branch.name : 'FeastFlow DHA Branch'}*\nAddress: ${branch ? branch.address : 'Phase 5 Commercial DHA, Lahore'}\nPhone: ${branch ? branch.phone : '042-35894120'}\n\nPlease confirm your pickup order:`,
+          buttons: [
+            { id: 'btn_confirm_order', title: '✅ Confirm Order' },
+            { id: 'btn_cancel_checkout', title: '❌ Cancel' }
+          ]
+        };
+      } else {
+        draft.orderType = 'DELIVERY';
+        session.checkout_state = 'AWAITING_CUSTOMER_NAME';
+        session.checkout_draft = draft;
+        await session.save();
+
+        return {
+          type: 'text',
+          body: `🚚 *Home Delivery Selected*\n\nStep 1/9: What is your full name?`
+        };
+      }
+    }
+
+    if (session.checkout_state === 'AWAITING_CUSTOMER_NAME') {
+      draft.name = text.trim();
+      session.checkout_state = 'AWAITING_PHONE';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'interactive_button',
+        body: `Step 2/9: Thanks ${draft.name}! Please enter your phone number, or confirm your WhatsApp number (${phone}):`,
+        buttons: [
+          { id: 'btn_confirm_phone', title: `📱 Use ${phone}` }
+        ]
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_PHONE') {
+      draft.phone = cleanText.includes('use') || payload.id === 'btn_confirm_phone' ? phone : text.trim();
+      session.checkout_state = 'AWAITING_HOUSE_NUMBER';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'text',
+        body: `Step 3/9: What is your House/Flat number? (e.g. 42-B)`
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_HOUSE_NUMBER') {
+      draft.houseNumber = text.trim();
+      session.checkout_state = 'AWAITING_STREET_NUMBER';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'text',
+        body: `Step 4/9: What is your Street number or Lane? (e.g. Street 10)`
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_STREET_NUMBER') {
+      draft.streetNumber = text.trim();
+      session.checkout_state = 'AWAITING_AREA';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'text',
+        body: `Step 5/9: What is your Area / Sector / Society? (e.g. Phase 5 DHA)`
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_AREA') {
+      draft.area = text.trim();
+      session.checkout_state = 'AWAITING_CITY';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'interactive_button',
+        body: `Step 6/9: What is your City?`,
+        buttons: [
+          { id: 'btn_city_lahore', title: '📍 Lahore' }
+        ]
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_CITY') {
+      draft.city = cleanText.includes('lahore') || payload.id === 'btn_city_lahore' ? 'Lahore' : text.trim();
+      session.checkout_state = 'AWAITING_LANDMARK';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'interactive_button',
+        body: `Step 7/9: Any nearest landmark? (e.g. Near Jalal Sons, or tap Skip):`,
+        buttons: [
+          { id: 'btn_skip_landmark', title: '⏩ Skip Landmark' }
+        ]
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_LANDMARK') {
+      draft.landmark = (cleanText.includes('skip') || payload.id === 'btn_skip_landmark') ? '' : text.trim();
+      session.checkout_state = 'AWAITING_INSTRUCTIONS';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'interactive_button',
+        body: `Step 8/9: Any delivery instructions for rider? (e.g. Ring bell twice, or tap Skip):`,
+        buttons: [
+          { id: 'btn_skip_instructions', title: '⏩ Skip Instructions' }
+        ]
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_INSTRUCTIONS') {
+      draft.instructions = (cleanText.includes('skip') || payload.id === 'btn_skip_instructions') ? '' : text.trim();
+      session.checkout_state = 'AWAITING_DELIVERY_LOCATION';
+      session.checkout_draft = draft;
+      await session.save();
+
+      return {
+        type: 'interactive_button',
+        body: `Step 9/9: 📍 *Exact Delivery Location*\n\nPlease share your exact location pin so our rider can navigate straight to your doorstep.`,
+        buttons: [
+          { id: 'btn_share_location', title: '📍 Share Current Location' },
+          { id: 'btn_continue_manual_loc', title: '📍 Use Address Pin' }
+        ]
+      };
+    }
+
+    if (session.checkout_state === 'AWAITING_DELIVERY_LOCATION') {
+      if (cleanText.includes('continue') || payload.id === 'btn_continue_manual_loc') {
+        draft.latitude = draft.latitude || 31.4704;
+        draft.longitude = draft.longitude || 74.4101;
+        draft.accuracy = 10;
+        session.checkout_state = 'AWAITING_DELIVERY_CONFIRMATION';
+        session.checkout_draft = draft;
+        await session.save();
+      }
+    }
+
+    if (session.checkout_state === 'AWAITING_DELIVERY_CONFIRMATION') {
+      if (cleanText.includes('confirm') || payload.id === 'btn_confirm_order') {
+        session.checkout_state = null;
+        await session.save();
+        return {
+          type: 'text',
+          body: `🎉 *Thank you! Your order has been placed successfully.*\nOur kitchen is preparing your hot meal and a rider will be assigned shortly.`
+        };
+      }
+    }
+  }
 
   // 1. First Message / Welcome Flow ("hi", "hello", "start", etc.)
   if (cleanText.includes('hi') || cleanText.includes('hello') || cleanText.includes('start') || cleanText.includes('menu')) {
@@ -160,7 +370,23 @@ async function processWhatsAppConversation(phone, text, payload) {
     }
   }
 
-  // 2. Restaurant Location Button Click
+  // 2. Start Checkout Flow ("checkout", "place order", "btn_place_order", "btn_new_order")
+  if (cleanText.includes('checkout') || cleanText.includes('place order') || payload.id === 'btn_place_order' || payload.id === 'btn_new_order') {
+    session.checkout_state = 'AWAITING_ORDER_TYPE';
+    session.checkout_draft = {};
+    await session.save();
+
+    return {
+      type: 'interactive_button',
+      body: `Please select your order type:`,
+      buttons: [
+        { id: 'btn_home_delivery', title: '🚚 Home Delivery' },
+        { id: 'btn_self_pickup', title: '🏪 Self Pickup' }
+      ]
+    };
+  }
+
+  // 3. Restaurant Location Button Click
   if (cleanText.includes('location') || payload.id === 'btn_location' || cleanText.includes('3️⃣')) {
     const branch = await Branch.findOne({ branch_id: 'BR-DHA' });
     return {
@@ -175,7 +401,7 @@ async function processWhatsAppConversation(phone, text, payload) {
     };
   }
 
-  // 3. Category List Menu
+  // 4. Category List Menu
   if (cleanText.includes('view menu') || payload.id === 'btn_view_menu' || cleanText.includes('1️⃣')) {
     const categories = await MenuCategory.find({ is_active: true }).sort({ display_order: 1 });
     return {

@@ -11,7 +11,7 @@ const ReviewReward = require('../models/ReviewReward');
 const Reminder = require('../models/Reminder');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const Counter = require('../models/Counter');
-const { validateAndCalculateCart } = require('../services/orderService');
+const { validateAndCalculateCart, normalizeOrderStatus, CANONICAL_STATUS } = require('../services/orderService');
 
 const getIO = (req) => req.app.get('io');
 
@@ -137,23 +137,100 @@ router.post('/checkout', async (req, res) => {
       branch_id,
       items,
       delivery_type,
+      orderType: rawOrderType,
       delivery_address,
-      payment_method
+      deliveryAddress: rawDeliveryAddress,
+      deliveryLocation: rawDeliveryLocation,
+      payment_method,
+      customer: rawCustomer
     } = req.body;
 
-    if (!customer_phone || !items || items.length === 0) {
+    const phoneVal = (rawCustomer?.phone || customer_phone || '').trim();
+    const nameVal = (rawCustomer?.name || customer_name || 'Customer').trim();
+
+    if (!phoneVal || !items || items.length === 0) {
       return res.status(400).json({ success: false, message: 'Phone number and cart items are required' });
     }
 
-    let customer = await Customer.findOne({ phone: customer_phone.trim() });
+    const isPickup = (rawOrderType === 'PICKUP' || rawOrderType === 'Pickup' || delivery_type === 'Pickup' || delivery_type === 'PICKUP');
+    const orderType = isPickup ? 'PICKUP' : 'DELIVERY';
+    const legacyDeliveryType = isPickup ? 'Pickup' : 'Home Delivery';
+
+    // Parse Delivery Address
+    let houseNumber = rawDeliveryAddress?.houseNumber || '';
+    let streetNumber = rawDeliveryAddress?.streetNumber || '';
+    let area = rawDeliveryAddress?.area || '';
+    let city = rawDeliveryAddress?.city || 'Lahore';
+    let landmark = rawDeliveryAddress?.landmark || '';
+    let instructions = rawDeliveryAddress?.instructions || '';
+    let formattedAddress = rawDeliveryAddress?.formattedAddress || '';
+
+    if (!formattedAddress) {
+      if (rawDeliveryAddress && (houseNumber || streetNumber || area)) {
+        const parts = [
+          houseNumber ? `House/Flat ${houseNumber}` : '',
+          streetNumber ? `Street ${streetNumber}` : '',
+          area,
+          landmark ? `Near ${landmark}` : '',
+          city
+        ].filter(Boolean);
+        formattedAddress = parts.join(', ');
+      } else if (delivery_address?.address) {
+        formattedAddress = delivery_address.address;
+      } else if (typeof delivery_address === 'string') {
+        formattedAddress = delivery_address;
+      } else {
+        formattedAddress = isPickup ? 'Store Pickup (DHA Branch)' : 'Phase 5 DHA, Lahore';
+      }
+    }
+
+    // Parse Delivery Location Coordinates
+    let lat = rawDeliveryLocation?.latitude ?? delivery_address?.lat;
+    let lng = rawDeliveryLocation?.longitude ?? delivery_address?.lng;
+    let accuracy = rawDeliveryLocation?.accuracy ?? null;
+
+    if (!isPickup) {
+      // Validate coordinates for Home Delivery
+      if (lat !== undefined && lat !== null && lng !== undefined && lng !== null) {
+        lat = Number(lat);
+        lng = Number(lng);
+        if (isNaN(lat) || isNaN(lng) || lat < -90 || lat > 90 || lng < -180 || lng > 180) {
+          return res.status(400).json({ success: false, message: 'Invalid location coordinates. Latitude must be between -90 and 90, Longitude between -180 and 180.' });
+        }
+      } else {
+        // Fallback default coordinates if not provided (for backward compatibility)
+        lat = 31.4704;
+        lng = 74.4101;
+      }
+    } else {
+      // Pickup does not require customer coordinates
+      lat = lat ? Number(lat) : 31.4704;
+      lng = lng ? Number(lng) : 74.4101;
+    }
+
+    let customer = await Customer.findOne({ phone: phoneVal });
     if (!customer) {
       const newId = await Counter.getNextSequence('customer_id', 'CUST-', 4, 1000);
       customer = await Customer.create({
         customer_id: newId,
-        name: customer_name ? customer_name.trim() : 'Customer',
-        phone: customer_phone.trim(),
-        addresses: [delivery_address || { label: 'Home', address: 'House 42, Street 10, Phase 5 DHA, Lahore', lat: 31.4750, lng: 74.4200 }]
+        name: nameVal,
+        phone: phoneVal,
+        addresses: [
+          { label: 'Home', address: formattedAddress, lat, lng }
+        ]
       });
+    } else {
+      if (nameVal && nameVal !== 'Customer' && customer.name !== nameVal) {
+        customer.name = nameVal;
+      }
+      // Add or update recent address in customer profile
+      if (!isPickup && formattedAddress) {
+        const existingAddrIndex = (customer.addresses || []).findIndex(a => a.address === formattedAddress);
+        if (existingAddrIndex === -1) {
+          customer.addresses.unshift({ label: 'Delivery', address: formattedAddress, lat, lng });
+          if (customer.addresses.length > 5) customer.addresses = customer.addresses.slice(0, 5);
+        }
+      }
     }
 
     // SERVER-SIDE PRICE VALIDATION & CALCULATION (Prevents client-side price tampering)
@@ -168,21 +245,48 @@ router.post('/checkout', async (req, res) => {
       if (branchObj) branchName = branchObj.name;
     }
 
-    const newOrder = await Order.create({
+    const orderSnapshot = {
       order_id: orderId,
       customer_id: customer.customer_id,
       customer_name: customer.name,
       customer_phone: customer.phone,
+      customer: {
+        name: customer.name,
+        phone: customer.phone
+      },
       branch_id: branch_id || 'BR-DHA',
       branch_name: branchName,
       items: processedItems,
-      delivery_type: delivery_type || 'Home Delivery',
-      delivery_address: delivery_address || (customer.addresses && customer.addresses[0]) || { label: 'Home', address: 'House 42, Street 10, Phase 5 DHA, Lahore' },
+      delivery_type: legacyDeliveryType,
+      orderType: orderType,
+      deliveryAddress: {
+        houseNumber,
+        streetNumber,
+        area,
+        city,
+        landmark,
+        instructions,
+        formattedAddress
+      },
+      deliveryLocation: isPickup ? null : {
+        latitude: lat,
+        longitude: lng,
+        accuracy,
+        confirmedAt: new Date()
+      },
+      delivery_address: {
+        label: isPickup ? 'Pickup' : 'Home',
+        address: formattedAddress,
+        lat,
+        lng
+      },
       payment_method: payment_method || 'Cash on Delivery',
-      payment_status: 'Pending',
-      order_status: 'Received',
+      payment_status: (payment_method === 'Online Payment' || payment_method === 'Bank Transfer') ? 'Payment Verification Pending' : 'Pending',
+      order_status: CANONICAL_STATUS.RECEIVED,
       total_amount: totalAmount
-    });
+    };
+
+    const newOrder = await Order.create(orderSnapshot);
 
     customer.total_orders += 1;
     customer.last_order_date = new Date();
@@ -191,6 +295,12 @@ router.post('/checkout', async (req, res) => {
     });
     customer.updateCustomerLevel();
     await customer.save();
+
+    // Clear checkout draft in session if exists
+    await WhatsAppSession.findOneAndUpdate(
+      { phone: customer.phone },
+      { checkout_state: null, checkout_draft: {}, last_interaction: new Date() }
+    );
 
     const io = getIO(req);
     if (io) {
@@ -228,16 +338,33 @@ router.get('/track', async (req, res) => {
       return res.status(404).json({ success: false, message: 'No matching order found.' });
     }
 
-    let riderLocation = null;
+    // Normalize order status for frontend display
+    order.order_status = normalizeOrderStatus(order.order_status);
+
+    let riderData = null;
     if (order.rider_id) {
       const rider = await DeliveryRider.findOne({ rider_id: order.rider_id });
       if (rider) {
-        riderLocation = {
+        const rawLoc = order.riderLocation || rider.current_location || {};
+        const lat = rawLoc.latitude ?? rawLoc.lat;
+        const lng = rawLoc.longitude ?? rawLoc.lng;
+        const accuracy = rawLoc.accuracy ?? 10;
+        const updatedAt = rawLoc.updatedAt ?? rawLoc.updated_at ?? new Date();
+
+        riderData = {
           rider_id: rider.rider_id,
           name: rider.name,
           phone: rider.phone,
           vehicle_number: rider.vehicle_number,
-          location: rider.current_location
+          location: lat !== undefined && lng !== undefined ? {
+            latitude: Number(lat),
+            longitude: Number(lng),
+            lat: Number(lat),
+            lng: Number(lng),
+            accuracy: Number(accuracy),
+            updated_at: updatedAt,
+            updatedAt: updatedAt
+          } : null
         };
       }
     }
@@ -249,7 +376,7 @@ router.get('/track', async (req, res) => {
     res.json({
       success: true,
       order,
-      rider: riderLocation,
+      rider: riderData,
       branch_location: branchLocation
     });
   } catch (err) {

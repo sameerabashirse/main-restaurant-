@@ -34,8 +34,11 @@ export default function App() {
   return (
     <Routes>
       <Route path="/" element={<CustomerPage />} />
+      <Route path="/admin" element={<Navigate to="/admin/dashboard" replace />} />
       <Route path="/admin/login" element={<Login kind="admin" />} />
+      <Route path="/staff" element={<Navigate to="/staff/login" replace />} />
       <Route path="/staff/login" element={<Login />} />
+      <Route path="/rider" element={<Navigate to="/rider/dashboard" replace />} />
       <Route path="/rider/login" element={<Login kind="rider" />} />
       <Route path="/admin/dashboard" element={<Protected role="admin"><OperationsDashboard role="admin" /></Protected>} />
       <Route path="/staff/manager/dashboard" element={<Protected role="manager"><OperationsDashboard role="manager" /></Protected>} />

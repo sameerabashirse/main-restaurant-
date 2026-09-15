@@ -31,6 +31,11 @@ function initAdminSocket() {
         }
       });
 
+      adminSocket.on('order:cash-collected', (data) => {
+        Utils.showToast(`💵 Cash Collected by ${data.rider_name || 'Rider'}: ${Utils.formatCurrency(data.amount)} (Order #${data.order_id})`, 'success');
+        loadAdminOrders();
+      });
+
       adminSocket.on('rider:location', (data) => {
         updateMapRiderLocation(data.rider_id, data.lat, data.lng);
       });
@@ -173,7 +178,17 @@ async function loadAdminOrders() {
           <td class="p-3 text-slate-600">${o.branch_name || 'DHA'}</td>
           <td class="p-3 max-w-xs truncate" title="${itemsText}">${itemsText}</td>
           <td class="p-3 font-bold text-slate-900">${Utils.formatCurrency(o.total_amount)}</td>
-          <td class="p-3">${o.payment_status === 'Paid' ? '<span class="text-emerald-700 font-bold">Paid</span>' : '<span class="text-amber-700 font-semibold">Pending</span>'}</td>
+          <td class="p-3">
+            <div>${o.payment_status === 'Paid' ? '<span class="text-emerald-700 font-bold">Paid</span>' : `<span class="text-amber-700 font-semibold">${o.payment_status || 'Pending'}</span>`}</div>
+            ${o.cashReceivedByRider ? `
+              <div class="mt-1 text-[10px] text-emerald-900 bg-emerald-50 border border-emerald-200 rounded p-1 leading-tight">
+                <span class="font-bold text-emerald-800">💵 Cash Collected</span>
+                <div>Rider: <b>${o.cashReceivedRiderName || o.rider_name || 'Rider'}</b></div>
+                <div>Amount: <b>${Utils.formatCurrency(o.cashReceivedAmount || o.total_amount)}</b></div>
+                <div class="text-[9px] text-slate-400">${Utils.formatDate(o.cashReceivedAt)}</div>
+              </div>
+            ` : ''}
+          </td>
           <td class="p-3">${Utils.getStatusBadge(o.order_status)}</td>
           <td class="p-3">
             <select class="bg-white border border-slate-200 rounded px-2 py-1 text-[11px]" onchange="assignOrderRider('${o.order_id}', this.value)">

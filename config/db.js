@@ -19,30 +19,48 @@ const Counter = require('../models/Counter');
 
 let mongoServer;
 
+const startMemoryDatabase = async () => {
+  mongoServer = await MongoMemoryServer.create();
+  await mongoose.connect(mongoServer.getUri());
+  console.log('MongoDB Memory Server connected for local development.');
+};
+
+const hasPlaceholderCredentials = (uri) => {
+  if (!uri) return false;
+
+  const credentials = uri.match(/^mongodb(?:\+srv)?:\/\/([^@]+)@/i)?.[1];
+  return Boolean(credentials && (credentials.includes('<') || credentials.includes('>')));
+};
+
 const connectDB = async () => {
+  const configuredUri = process.env.MONGODB_URI?.trim();
+  const isProduction = process.env.NODE_ENV === 'production';
+
   try {
-    let uri = process.env.MONGODB_URI;
+    if (!configuredUri || hasPlaceholderCredentials(configuredUri)) {
+      if (isProduction) {
+        throw new Error('MONGODB_URI is missing or contains placeholder credentials.');
+      }
 
-    if (!uri) {
-      console.log('⚡ MONGODB_URI not set. Initializing MongoDB Memory Server for standalone execution...');
-      mongoServer = await MongoMemoryServer.create();
-      uri = mongoServer.getUri();
+      console.warn('MONGODB_URI is missing or contains placeholder credentials; using an in-memory database for local development.');
+      await startMemoryDatabase();
+    } else {
+      await mongoose.connect(configuredUri, { serverSelectionTimeoutMS: 10000 });
+      console.log('MongoDB connected successfully.');
     }
-
-    await mongoose.connect(uri);
-    console.log(`✅ MongoDB Connected successfully: ${uri.includes('127.0.0.1') || uri.includes('localhost') ? 'Local/Memory Mongo Server' : uri}`);
 
     await seedInitialData();
   } catch (error) {
-    console.error('❌ MongoDB Connection Error:', error.message);
-    if (!process.env.MONGODB_URI) {
-      console.log('🔄 Retrying fallback with MongoDB Memory Server...');
-      mongoServer = await MongoMemoryServer.create();
-      const uri = mongoServer.getUri();
-      await mongoose.connect(uri);
-      console.log('✅ Fallback MongoDB Memory Server Connected successfully!');
+    console.error('MongoDB connection error:', error.message);
+
+    if (!isProduction && mongoose.connection.readyState === 0) {
+      console.warn('Using an in-memory database because the configured development database is unavailable.');
+      await startMemoryDatabase();
       await seedInitialData();
+      return;
     }
+
+    throw error;
   }
 };
 
@@ -253,6 +271,144 @@ const seedInitialData = async () => {
               { name: 'Small', price: 299 },
               { name: 'Medium', price: 399 },
               { name: 'Large', price: 499 }
+            ]
+          }
+        },
+        {
+          name: 'Chocolate Lava Cake',
+          category: 'Desserts',
+          description: 'Warm decadent chocolate cake with a rich molten liquid chocolate center.',
+          price: 550,
+          image: 'https://images.unsplash.com/photo-1606313564200-e75d5e30476c?w=500',
+          sizes: [
+            { name: 'Single Serving', price: 550 },
+            { name: 'Double Sharing', price: 999 }
+          ],
+          extras: [
+            { name: 'Vanilla Ice Cream Scoop', price: 150 },
+            { name: 'Extra Chocolate Fudge', price: 100 }
+          ],
+          customization: {
+            flavours: ['Classic Dark Chocolate', 'Belgian Milk Chocolate'],
+            sizes: [
+              { name: 'Single Serving', price: 550 },
+              { name: 'Double Sharing', price: 999 }
+            ],
+            extras: [
+              { name: 'Vanilla Ice Cream Scoop', price: 150 },
+              { name: 'Extra Chocolate Fudge', price: 100 }
+            ]
+          }
+        },
+        {
+          name: 'Cheesecake',
+          category: 'Desserts',
+          description: 'Smooth and creamy New York style cheesecake with a buttery graham cracker crust.',
+          price: 650,
+          image: 'https://images.unsplash.com/photo-1533134242443-d4fd215305ad?w=500',
+          sizes: [
+            { name: 'Slice', price: 650 },
+            { name: 'Mini Whole Cake', price: 1850 }
+          ],
+          extras: [
+            { name: 'Strawberry Compote', price: 120 },
+            { name: 'Blueberry Topping', price: 150 },
+            { name: 'Whipped Cream', price: 80 }
+          ],
+          customization: {
+            flavours: ['Classic New York', 'Strawberry Swirl', 'Blueberry Bliss', 'Lotus Biscoff'],
+            sizes: [
+              { name: 'Slice', price: 650 },
+              { name: 'Mini Whole Cake', price: 1850 }
+            ],
+            extras: [
+              { name: 'Strawberry Compote', price: 120 },
+              { name: 'Blueberry Topping', price: 150 },
+              { name: 'Whipped Cream', price: 80 }
+            ]
+          }
+        },
+        {
+          name: 'Brownie with Ice Cream',
+          category: 'Desserts',
+          description: 'Warm fudgy chocolate brownie topped with premium vanilla bean ice cream and hot chocolate drizzle.',
+          price: 499,
+          image: 'https://images.unsplash.com/photo-1607920591413-4ec007e70023?w=500',
+          sizes: [
+            { name: 'Regular', price: 499 },
+            { name: 'Large Sizzler', price: 799 }
+          ],
+          extras: [
+            { name: 'Extra Scoop Ice Cream', price: 150 },
+            { name: 'Roasted Almonds', price: 90 },
+            { name: 'Caramel Drizzle', price: 80 }
+          ],
+          customization: {
+            flavours: ['Fudge Walnut Brownie', 'Double Chocolate Brownie', 'Nutella Brownie'],
+            sizes: [
+              { name: 'Regular', price: 499 },
+              { name: 'Large Sizzler', price: 799 }
+            ],
+            extras: [
+              { name: 'Extra Scoop Ice Cream', price: 150 },
+              { name: 'Roasted Almonds', price: 90 },
+              { name: 'Caramel Drizzle', price: 80 }
+            ]
+          }
+        },
+        {
+          name: 'Ice Cream Sundae',
+          category: 'Desserts',
+          description: 'Generous artisanal ice cream scoops layered with wafer, sprinkles, chocolate syrup and cherry.',
+          price: 450,
+          image: 'https://images.unsplash.com/photo-1563805042-7684c019e1cb?w=500',
+          sizes: [
+            { name: 'Standard (2 Scoops)', price: 450 },
+            { name: 'Jumbo (3 Scoops)', price: 650 }
+          ],
+          extras: [
+            { name: 'Crushed Oreos', price: 90 },
+            { name: 'Chocolate Chips', price: 80 },
+            { name: 'Waffle Cone Crumbs', price: 70 }
+          ],
+          customization: {
+            flavours: ['Chocolate & Vanilla', 'Strawberry Delight', 'Mango Mania', 'Cookies & Cream'],
+            sizes: [
+              { name: 'Standard (2 Scoops)', price: 450 },
+              { name: 'Jumbo (3 Scoops)', price: 650 }
+            ],
+            extras: [
+              { name: 'Crushed Oreos', price: 90 },
+              { name: 'Chocolate Chips', price: 80 },
+              { name: 'Waffle Cone Crumbs', price: 70 }
+            ]
+          }
+        },
+        {
+          name: 'Molten Brownie',
+          category: 'Desserts',
+          description: 'Decadent deep-baked molten skillet brownie served warm with a luscious gooey chocolate core.',
+          price: 599,
+          image: 'https://images.unsplash.com/photo-1624353365286-3f8d62daad51?w=500',
+          sizes: [
+            { name: 'Regular', price: 599 },
+            { name: 'Skillet Special', price: 899 }
+          ],
+          extras: [
+            { name: 'Vanilla Bean Gelato', price: 160 },
+            { name: 'Salted Caramel Swirl', price: 100 },
+            { name: 'Nutella Drizzle', price: 120 }
+          ],
+          customization: {
+            flavours: ['Original Molten Chocolate', 'Lotus Caramel Molten', 'Dark Choc & Hazelnut'],
+            sizes: [
+              { name: 'Regular', price: 599 },
+              { name: 'Skillet Special', price: 899 }
+            ],
+            extras: [
+              { name: 'Vanilla Bean Gelato', price: 160 },
+              { name: 'Salted Caramel Swirl', price: 100 },
+              { name: 'Nutella Drizzle', price: 120 }
             ]
           }
         }

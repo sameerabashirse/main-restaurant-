@@ -20,6 +20,7 @@ let riderMarker = null;
 let customerMarker = null;
 let branchMarker = null;
 let activeTrackOrderId = null;
+let selectedPaymentMethod = 'Cash on Delivery';
 
 // Initialize on customer page
 document.addEventListener('DOMContentLoaded', () => {
@@ -252,7 +253,11 @@ function handleWAButtonClick(buttonId, buttonTitle) {
   else if (buttonId === 'btn_location' || buttonTitle.includes('Location')) showWhatsAppLocationMessage();
   else if (buttonId === 'btn_reorder_last' || buttonTitle.includes('Same Again') || buttonTitle.includes('Reorder')) handleQuickReorderFlow();
   else if (buttonId === 'btn_checkout_now' || buttonTitle.includes('Checkout')) triggerWACheckout();
-  else if (buttonId === 'btn_confirm_order_final' || buttonTitle.includes('Confirm Order')) processWAOrderConfirmation();
+  else if (buttonId === 'btn_confirm_order_final' || buttonTitle.includes('Confirm Order') || buttonTitle.includes('Confirm & Place Order')) processWAOrderConfirmation();
+  else if (buttonId === 'btn_pay_cod' || buttonTitle.includes('Cash on Delivery')) setWAPaymentMethod('Cash on Delivery');
+  else if (buttonId === 'btn_pay_online' || buttonTitle.includes('Online Payment')) setWAPaymentMethod('Online Payment');
+  else if (buttonId === 'btn_pay_bank' || buttonTitle.includes('Bank Transfer')) setWAPaymentMethod('Bank Transfer');
+  else if (buttonId === 'btn_change_payment' || buttonTitle.includes('Change Payment') || buttonTitle.includes('Payment Method')) promptWAPaymentMethod();
   else if (buttonId === 'btn_track' || buttonId === 'btn_track_order_live' || buttonTitle.includes('Track')) promptWATrackOrder();
   else if (buttonId === 'btn_rewards' || buttonTitle.includes('Rewards')) showWARewardsInfo();
   else if (buttonId.startsWith('cat_')) selectWACategory(buttonId.replace('cat_', ''));
@@ -608,6 +613,34 @@ function updateWACartBar() {
   if (priceEl) priceEl.innerText = Utils.formatCurrency(totalPrice);
 }
 
+function promptWAPaymentMethod() {
+  const msg = `
+    <div class="font-bold text-slate-800 mb-1.5">💳 Select Payment Method:</div>
+    <div class="text-xs text-slate-600 space-y-1">
+      <div>• 💵 <strong>Cash on Delivery</strong>: Pay cash to rider upon delivery</div>
+      <div>• 💳 <strong>Online Payment</strong>: Card / JazzCash / EasyPaisa (verification pending)</div>
+      <div>• 🏦 <strong>Bank Transfer</strong>: Direct IBAN transfer</div>
+    </div>
+  `;
+  appendWhatsAppInboundMsg(msg, [
+    { id: 'btn_pay_cod', title: '💵 Cash on Delivery' },
+    { id: 'btn_pay_online', title: '💳 Online Payment' },
+    { id: 'btn_pay_bank', title: '🏦 Bank Transfer' }
+  ]);
+}
+
+function setWAPaymentMethod(method) {
+  selectedPaymentMethod = method;
+  let detailNote = '💵 You will pay cash to our rider.';
+  if (method === 'Online Payment') {
+    detailNote = '💳 Status will be Payment Verification Pending until verified by staff.';
+  } else if (method === 'Bank Transfer') {
+    detailNote = '🏦 Verification pending. Staff will confirm receipt prior to dispatch.';
+  }
+  appendWhatsAppInboundMsg(`✅ Payment method set to: <strong>${method}</strong>.<br><span class="text-xs text-slate-500">${detailNote}</span>`);
+  triggerWACheckout();
+}
+
 function triggerWACheckout() {
   if (currentCart.length === 0) {
     Utils.showToast('Your cart is empty! Add items from the menu.', 'warning');
@@ -622,13 +655,14 @@ function triggerWACheckout() {
     <div class="text-xs text-slate-600 space-y-1 mb-2">${itemsHtml}</div>
     <div class="text-xs text-slate-700 space-y-0.5 border-t border-slate-200 pt-1.5">
       <div>📍 <strong>Delivery:</strong> House 42, Street 10, Phase 5 DHA, Lahore</div>
-      <div>💵 <strong>Payment:</strong> Cash on Delivery</div>
+      <div>💳 <strong>Payment Method:</strong> <strong class="text-emerald-700">${selectedPaymentMethod}</strong></div>
       <div class="text-sm font-extrabold text-red-900 pt-1">Total: ${Utils.formatCurrency(grandTotal)}</div>
     </div>
   `;
 
   appendWhatsAppInboundMsg(checkoutMsg, [
     { id: 'btn_confirm_order_final', title: '✅ Confirm & Place Order' },
+    { id: 'btn_change_payment', title: '💳 Change Payment Method' },
     { id: 'btn_view_menu', title: '✏️ Add / Edit Items' }
   ]);
 }
@@ -644,7 +678,7 @@ async function processWAOrderConfirmation() {
       items: currentCart,
       delivery_type: 'Home Delivery',
       delivery_address: { label: 'Home', address: 'House 42, Street 10, Phase 5 DHA, Lahore', lat: 31.4750, lng: 74.4200 },
-      payment_method: 'Cash on Delivery'
+      payment_method: selectedPaymentMethod || 'Cash on Delivery'
     };
 
     const data = await API.post('/api/chat/checkout', payload);
@@ -660,8 +694,9 @@ async function processWAOrderConfirmation() {
         <div class="text-xs text-slate-700 space-y-1">
           <div>Order ID: <strong class="text-slate-900">${order.order_id}</strong></div>
           <div>Total: <strong class="text-red-900">${Utils.formatCurrency(order.total_amount)}</strong></div>
-          <div>Status: <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">Received</span></div>
-          <div class="text-slate-500 text-[11px]">We have sent this order to our kitchen!</div>
+          <div>Payment: <strong class="text-emerald-800">${order.payment_method} (${order.payment_status})</strong></div>
+          <div>Status: <span class="bg-emerald-100 text-emerald-800 px-2 py-0.5 rounded text-[10px] font-bold">${order.order_status}</span></div>
+          <div class="text-slate-500 text-[11px]">${order.payment_method === 'Cash on Delivery' ? 'Please keep exact cash ready for rider.' : 'Payment verification pending with staff.'}</div>
         </div>
       `;
 
@@ -775,6 +810,8 @@ window.wizSelectCrust = wizSelectCrust;
 window.wizToggleExtra = wizToggleExtra;
 window.confirmWizAddToCart = confirmWizAddToCart;
 window.triggerWACheckout = triggerWACheckout;
+window.promptWAPaymentMethod = promptWAPaymentMethod;
+window.setWAPaymentMethod = setWAPaymentMethod;
 window.promptWATrackOrder = promptWATrackOrder;
 window.showWARewardsInfo = showWARewardsInfo;
 window.showWhatsAppLocationMessage = showWhatsAppLocationMessage;

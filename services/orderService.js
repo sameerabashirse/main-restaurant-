@@ -132,12 +132,44 @@ async function validateAndCalculateCart(items) {
 }
 
 /**
+ * Canonical Order Statuses
+ */
+const CANONICAL_STATUS = {
+  RECEIVED: 'RECEIVED',
+  CONFIRMED: 'CONFIRMED',
+  PREPARING: 'PREPARING',
+  READY_FOR_PICKUP: 'READY_FOR_PICKUP',
+  RIDER_ASSIGNED: 'RIDER_ASSIGNED',
+  RIDER_ACCEPTED: 'RIDER_ACCEPTED',
+  PICKED_UP: 'PICKED_UP',
+  OUT_FOR_DELIVERY: 'OUT_FOR_DELIVERY',
+  DELIVERED: 'DELIVERED',
+  CANCELLED: 'CANCELLED'
+};
+
+function normalizeOrderStatus(status) {
+  if (!status) return CANONICAL_STATUS.RECEIVED;
+  const s = String(status).trim().toUpperCase().replace(/[\s-]+/g, '_');
+  if (s === 'RECEIVED') return CANONICAL_STATUS.RECEIVED;
+  if (s === 'CONFIRMED') return CANONICAL_STATUS.CONFIRMED;
+  if (s === 'PREPARING') return CANONICAL_STATUS.PREPARING;
+  if (s === 'READY' || s === 'READY_FOR_PICKUP') return CANONICAL_STATUS.READY_FOR_PICKUP;
+  if (s === 'RIDER_ASSIGNED' || s === 'ASSIGNED') return CANONICAL_STATUS.RIDER_ASSIGNED;
+  if (s === 'RIDER_ACCEPTED' || s === 'ACCEPTED') return CANONICAL_STATUS.RIDER_ACCEPTED;
+  if (s === 'PICKED_UP' || s === 'PICKEDUP') return CANONICAL_STATUS.PICKED_UP;
+  if (s === 'OUT_FOR_DELIVERY' || s === 'OUT_OF_DELIVERY') return CANONICAL_STATUS.OUT_FOR_DELIVERY;
+  if (s === 'DELIVERED') return CANONICAL_STATUS.DELIVERED;
+  if (s === 'CANCELLED' || s === 'CANCELED') return CANONICAL_STATUS.CANCELLED;
+  return s;
+}
+
+/**
  * Idempotent order delivery transition logic
  */
 async function processOrderDelivered(order, riderId = null) {
   if (!order) throw new Error('Order not found');
 
-  order.order_status = 'Delivered';
+  order.order_status = 'DELIVERED';
   order.payment_status = 'Paid';
 
   // Only apply stats increment if not previously processed
@@ -171,6 +203,8 @@ async function processOrderDelivered(order, riderId = null) {
 }
 
 module.exports = {
+  CANONICAL_STATUS,
+  normalizeOrderStatus,
   validateAndCalculateCart,
   processOrderDelivered
 };

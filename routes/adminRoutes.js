@@ -15,7 +15,7 @@ const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 const Counter = require('../models/Counter');
 const { authenticateToken, authorizeRoles } = require('../middleware/auth');
-const { processOrderDelivered } = require('../services/orderService');
+const { processOrderDelivered, normalizeOrderStatus, CANONICAL_STATUS } = require('../services/orderService');
 
 const getIO = (req) => req.app.get('io');
 
@@ -114,22 +114,50 @@ router.put('/orders/:order_id/status', authenticateToken, authorizeRoles('admin'
     const order = await Order.findOne({ order_id });
     if (!order) return res.status(404).json({ success: false, message: 'Order not found' });
 
-    if (order_status) order.order_status = order_status;
+    if (order_status) order.order_status = normalizeOrderStatus(order_status);
     if (payment_status) order.payment_status = payment_status;
 
     if (rider_id) {
+      const isHomeDelivery = (order.orderType === 'DELIVERY' || order.delivery_type === 'Home Delivery');
+      const hasCoords = (
+        (order.deliveryLocation?.latitude !== undefined && order.deliveryLocation?.latitude !== null &&
+         order.deliveryLocation?.longitude !== undefined && order.deliveryLocation?.longitude !== null) ||
+        (order.delivery_address?.lat !== undefined && order.delivery_address?.lat !== null &&
+         order.delivery_address?.lng !== undefined && order.delivery_address?.lng !== null)
+      );
+
+      if (isHomeDelivery && !hasCoords) {
+        return res.status(400).json({
+          success: false,
+          message: 'Cannot assign rider: Customer delivery location coordinates are missing.'
+        });
+      }
+
       const rider = await DeliveryRider.findOne({ rider_id });
       if (rider) {
         order.rider_id = rider.rider_id;
         order.rider_name = rider.name;
         order.rider_phone = rider.phone;
+        // If order was in early stages, transition to RIDER_ASSIGNED
+        if (!order_status || [CANONICAL_STATUS.RECEIVED, CANONICAL_STATUS.CONFIRMED, CANONICAL_STATUS.PREPARING, CANONICAL_STATUS.READY_FOR_PICKUP].includes(order.order_status)) {
+          order.order_status = CANONICAL_STATUS.RIDER_ASSIGNED;
+        }
         rider.assigned_order_id = order.order_id;
         rider.status = 'On Delivery';
         await rider.save();
+
+        const io = getIO(req);
+        if (io) {
+          io.emit('rider:assigned', {
+            rider_id: rider.rider_id,
+            order_id: order.order_id,
+            order
+          });
+        }
       }
     }
 
-    if (order_status === 'Delivered') {
+    if (normalizeOrderStatus(order.order_status) === CANONICAL_STATUS.DELIVERED) {
       await processOrderDelivered(order, rider_id || order.rider_id);
     } else {
       await order.save();
@@ -211,6 +239,11 @@ router.get('/payments', authenticateToken, authorizeRoles('admin', 'manager'), a
       amount: o.total_amount,
       method: o.payment_method,
       status: o.payment_status,
+      cashReceivedByRider: o.cashReceivedByRider,
+      cashReceivedAmount: o.cashReceivedAmount,
+      cashReceivedAt: o.cashReceivedAt,
+      cashReceivedRiderId: o.cashReceivedRiderId,
+      cashReceivedRiderName: o.cashReceivedRiderName,
       date: o.created_at
     }));
 
@@ -399,15 +432,14 @@ router.get('/riders', authenticateToken, authorizeRoles('admin', 'manager', 'del
 router.post('/riders', authenticateToken, authorizeRoles('admin', 'manager', 'delivery'), async (req, res) => {
   try {
     const riderId = await Counter.getNextSequence('rider_id', 'RIDER-', 3, 100);
+    const riderEmail = req.body.email || `rider_${riderId.toLowerCase()}@restaurant.com`;
     const rider = await DeliveryRider.create({
       rider_id: riderId,
       name: req.body.name,
       phone: req.body.phone,
+      email: riderEmail,
       vehicle_number: req.body.vehicle_number || 'LEK-0000'
     });
-
-    // Also create User login record so rider can sign into the mobile portal
-    const riderEmail = req.body.email || `rider_${riderId.toLowerCase()}@restaurant.com`;
     const defaultPassword = await bcrypt.hash('rider123', 10);
 
     const existingUser = await User.findOne({ email: riderEmail });

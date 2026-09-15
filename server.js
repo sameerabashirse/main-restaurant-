@@ -31,9 +31,6 @@ app.use(express.json());
 app.use(express.urlencoded({ extended: true }));
 app.use(express.static(path.join(__dirname, 'public')));
 
-// Connect Database & Seed initial records
-connectDB();
-
 // API & WhatsApp Routes
 app.use('/api/auth', authRoutes);
 app.use('/api/chat', chatRoutes);
@@ -77,6 +74,7 @@ app.get('/rider/dashboard', (req, res) => {
 // Backward compatibility helper routes
 app.get('/admin', (req, res) => res.redirect('/admin/login'));
 app.get('/staff', (req, res) => res.redirect('/staff/login'));
+app.get('/rider', (req, res) => res.redirect('/rider/login'));
 
 // Health check endpoint
 app.get('/api/health', (req, res) => {
@@ -89,29 +87,63 @@ app.get('/api/health', (req, res) => {
 
 // Socket.io Real-time Event Handling
 io.on('connection', (socket) => {
-  console.log(`🔌 New client connected: ${socket.id}`);
-
-  socket.on('rider:location:send', (data) => {
-    io.emit('rider:location', data);
-  });
+  console.log(`🔌 [Socket.IO] Client connected: ${socket.id}`);
 
   socket.on('join:order', (orderId) => {
-    socket.join(`order:${orderId}`);
+    if (orderId) {
+      const room = `order:${orderId}`;
+      socket.join(room);
+      console.log(`📡 [Socket.IO] Client ${socket.id} joined room: ${room}`);
+    }
   });
 
-  socket.on('disconnect', () => {
-    console.log(`❌ Client disconnected: ${socket.id}`);
+  socket.on('leave:order', (orderId) => {
+    if (orderId) {
+      const room = `order:${orderId}`;
+      socket.leave(room);
+      console.log(`📡 [Socket.IO] Client ${socket.id} left room: ${room}`);
+    }
+  });
+
+  socket.on('rider:location:send', (data) => {
+    const targetOrderId = data?.orderId || data?.order_id;
+    if (targetOrderId) {
+      const payload = {
+        orderId: targetOrderId,
+        latitude: Number(data.latitude ?? data.lat),
+        longitude: Number(data.longitude ?? data.lng),
+        accuracy: Number(data.accuracy) || 10,
+        timestamp: data.timestamp || new Date()
+      };
+      io.to(`order:${targetOrderId}`).emit('rider:location:update', payload);
+      io.to(`order:${targetOrderId}`).emit('rider:location', payload);
+      console.log(`📡 [Socket.IO] Forwarded GPS update to room order:${targetOrderId}`);
+    }
+  });
+
+  socket.on('disconnect', (reason) => {
+    console.log(`❌ [Socket.IO] Client disconnected: ${socket.id} (Reason: ${reason})`);
   });
 });
 
 const PORT = process.env.PORT || 3000;
 
-server.listen(PORT, () => {
-  console.log(`====================================================`);
-  console.log(`🚀 FEASTFLOW MULTI-PORTAL RESTAURANT SYSTEM RUNNING!`);
-  console.log(`💬 Customer WhatsApp Assistant: http://localhost:${PORT}`);
-  console.log(`👨‍🍳 Staff Operations Portal:   http://localhost:${PORT}/staff/login`);
-  console.log(`👑 Super Admin Portal:         http://localhost:${PORT}/admin/login`);
-  console.log(`🚴 Rider Portal:               http://localhost:${PORT}/rider/login`);
-  console.log(`====================================================`);
-});
+const startServer = async () => {
+  try {
+    await connectDB();
+    server.listen(PORT, () => {
+      console.log(`====================================================`);
+      console.log(`🚀 FEASTFLOW MULTI-PORTAL RESTAURANT SYSTEM RUNNING!`);
+      console.log(`💬 Customer WhatsApp Assistant: http://localhost:${PORT}`);
+      console.log(`👨‍🍳 Staff Operations Portal:   http://localhost:${PORT}/staff/login`);
+      console.log(`👑 Super Admin Portal:         http://localhost:${PORT}/admin/login`);
+      console.log(`🚴 Rider Portal:               http://localhost:${PORT}/rider/login`);
+      console.log(`====================================================`);
+    });
+  } catch (error) {
+    console.error('Server startup aborted because the database is unavailable.');
+    process.exitCode = 1;
+  }
+};
+
+startServer();
