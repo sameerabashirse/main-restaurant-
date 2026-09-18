@@ -47,6 +47,12 @@ const buttonTitle = (button, index) => limitText(button.title || button.label ||
 
 const listRowTitle = (row, index) => limitText(row.title || row.label || `Option ${index + 1}`, 24);
 
+const maskPhone = (phone) => {
+  const value = String(phone || '');
+  if (value.length <= 4) return value;
+  return `${'*'.repeat(Math.max(0, value.length - 4))}${value.slice(-4)}`;
+};
+
 const buildWhatsAppMessagePayload = (to, responsePayload, contextMessageId) => {
   const basePayload = {
     messaging_product: 'whatsapp',
@@ -224,6 +230,14 @@ router.post('/webhook', async (req, res) => {
   try {
     const body = req.body;
 
+    console.log('WhatsApp webhook POST received:', {
+      object: body?.object,
+      simulated: Boolean(body?.simulated),
+      entries: Array.isArray(body?.entry) ? body.entry.length : 0,
+      hasAccessToken: Boolean(String(process.env.WHATSAPP_TOKEN || '').trim()),
+      hasConfiguredPhoneNumberId: Boolean(String(process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim())
+    });
+
     // Verify WhatsApp API Payload Structure
     if (body.object === 'whatsapp_business_account' || body.simulated) {
       const entries = body.entry || [{ changes: [{ value: { messages: [body.message] } }] }];
@@ -233,7 +247,15 @@ router.post('/webhook', async (req, res) => {
         for (const change of changes) {
           const value = change.value || {};
           const messages = value.messages || [];
+          const statuses = value.statuses || [];
           const phoneNumberId = value.metadata?.phone_number_id;
+
+          console.log('WhatsApp webhook change:', {
+            field: change.field,
+            messageCount: messages.length,
+            statusCount: statuses.length,
+            metadataPhoneNumberIdPresent: Boolean(phoneNumberId)
+          });
 
           for (const msg of messages) {
             const fromPhone = msg.from || msg.phone || '03001234567';
@@ -256,6 +278,13 @@ router.post('/webhook', async (req, res) => {
               incomingText = 'Location Shared';
               payloadData = { lat: msg.location.latitude, lng: msg.location.longitude };
             }
+
+            console.log('WhatsApp inbound message:', {
+              from: maskPhone(fromPhone),
+              type: msgType,
+              textPresent: Boolean(incomingText),
+              messageIdPresent: Boolean(msg.id)
+            });
 
             // Log inbound message
             await WhatsAppMessage.create({
@@ -293,6 +322,12 @@ router.post('/webhook', async (req, res) => {
 
                 if (!sendResult.success) {
                   console.error('WhatsApp reply was not sent:', sendResult);
+                } else {
+                  console.log('WhatsApp reply sent:', {
+                    to: maskPhone(fromPhone),
+                    type: responsePayload.type || 'text',
+                    messageIdPresent: Boolean(sendResult.messageId)
+                  });
                 }
               } catch (sendError) {
                 outboundMessage.status = 'failed';
