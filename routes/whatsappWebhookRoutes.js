@@ -8,24 +8,33 @@ const MenuItem = require('../models/MenuItem');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
 
-const VERIFY_TOKEN = process.env.WHATSAPP_VERIFY_TOKEN || 'feastflow_verify_token_2026';
-
 // GET /api/whatsapp/webhook - Webhook Verification Handshake
 router.get('/webhook', (req, res) => {
-  const mode = req.query['hub.mode'];
-  const token = req.query['hub.verify_token'];
+  const mode = String(req.query['hub.mode'] || '').trim();
+  const receivedToken = String(req.query['hub.verify_token'] || '').trim();
   const challenge = req.query['hub.challenge'];
+  const expectedToken = String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
 
-  if (mode && token) {
-    if (mode === 'subscribe' && token === VERIFY_TOKEN) {
-      console.log('✅ WhatsApp Webhook Verified Successfully!');
-      return res.status(200).send(challenge);
-    } else {
-      console.warn('❌ WhatsApp Webhook Verification Token Mismatch');
-      return res.sendStatus(403);
-    }
+  console.log('Webhook verification attempt:', {
+    mode,
+    challengePresent: Boolean(challenge),
+    receivedTokenPresent: Boolean(receivedToken),
+    expectedTokenPresent: Boolean(expectedToken),
+    tokenMatches: receivedToken === expectedToken,
+    receivedTokenLength: receivedToken.length,
+    expectedTokenLength: expectedToken.length
+  });
+
+  if (
+    mode === 'subscribe' &&
+    receivedToken &&
+    expectedToken &&
+    receivedToken === expectedToken
+  ) {
+    return res.status(200).send(challenge);
   }
-  res.sendStatus(400);
+
+  return res.status(403).send('Forbidden');
 });
 
 // POST /api/whatsapp/webhook - Receive Webhook Events from WhatsApp Cloud API
