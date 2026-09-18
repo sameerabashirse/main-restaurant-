@@ -10,6 +10,7 @@ const WhatsAppMessage = require('../models/WhatsAppMessage');
 const Settings = require('../models/Settings');
 
 const DEFAULT_WHATSAPP_VERIFY_TOKEN = Settings.schema.path('whatsapp_verify_token').defaultValue;
+const WHATSAPP_GRAPH_API_VERSION = process.env.WHATSAPP_GRAPH_API_VERSION || 'v26.0';
 
 const getExpectedVerifyToken = async () => {
   const envToken = String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
@@ -32,6 +33,159 @@ const getExpectedVerifyToken = async () => {
   }
 
   return { token: DEFAULT_WHATSAPP_VERIFY_TOKEN, source: 'default' };
+};
+
+const limitText = (value, maxLength) => {
+  const text = String(value || '').replace(/\s+/g, ' ').trim();
+  if (text.length <= maxLength) return text;
+  return text.slice(0, Math.max(0, maxLength - 1)).trim() || 'Option';
+};
+
+const buttonId = (button, index) => limitText(button.id || `btn_${index + 1}`, 256);
+
+const buttonTitle = (button, index) => limitText(button.title || button.label || `Option ${index + 1}`, 20);
+
+const listRowTitle = (row, index) => limitText(row.title || row.label || `Option ${index + 1}`, 24);
+
+const buildWhatsAppMessagePayload = (to, responsePayload, contextMessageId) => {
+  const basePayload = {
+    messaging_product: 'whatsapp',
+    recipient_type: 'individual',
+    to
+  };
+
+  if (contextMessageId) {
+    basePayload.context = { message_id: contextMessageId };
+  }
+
+  if (responsePayload.type === 'location' && responsePayload.latitude && responsePayload.longitude) {
+    return {
+      ...basePayload,
+      type: 'location',
+      location: {
+        latitude: Number(responsePayload.latitude),
+        longitude: Number(responsePayload.longitude),
+        name: 'FeastFlow Restaurant',
+        address: limitText(responsePayload.body, 1000)
+      }
+    };
+  }
+
+  if (responsePayload.type === 'interactive_list') {
+    const sections = (responsePayload.sections || []).map((section, sectionIndex) => ({
+      title: limitText(section.title || `Section ${sectionIndex + 1}`, 24),
+      rows: (section.rows || []).slice(0, 10).map((row, rowIndex) => ({
+        id: limitText(row.id || `row_${sectionIndex + 1}_${rowIndex + 1}`, 200),
+        title: listRowTitle(row, rowIndex),
+        description: limitText(row.description || '', 72)
+      }))
+    })).filter((section) => section.rows.length > 0);
+
+    if (sections.length > 0) {
+      return {
+        ...basePayload,
+        type: 'interactive',
+        interactive: {
+          type: 'list',
+          body: { text: limitText(responsePayload.body, 1024) },
+          action: {
+            button: limitText(responsePayload.button_text || 'Select', 20),
+            sections
+          }
+        }
+      };
+    }
+  }
+
+  if (responsePayload.type === 'interactive_button' && Array.isArray(responsePayload.buttons) && responsePayload.buttons.length > 0) {
+    if (responsePayload.buttons.length <= 3) {
+      return {
+        ...basePayload,
+        type: 'interactive',
+        interactive: {
+          type: 'button',
+          body: { text: limitText(responsePayload.body, 1024) },
+          action: {
+            buttons: responsePayload.buttons.slice(0, 3).map((button, index) => ({
+              type: 'reply',
+              reply: {
+                id: buttonId(button, index),
+                title: buttonTitle(button, index)
+              }
+            }))
+          }
+        }
+      };
+    }
+
+    return {
+      ...basePayload,
+      type: 'interactive',
+      interactive: {
+        type: 'list',
+        body: { text: limitText(responsePayload.body, 1024) },
+        action: {
+          button: 'Select',
+          sections: [{
+            title: 'Options',
+            rows: responsePayload.buttons.slice(0, 10).map((button, index) => ({
+              id: buttonId(button, index),
+              title: listRowTitle(button, index)
+            }))
+          }]
+        }
+      }
+    };
+  }
+
+  return {
+    ...basePayload,
+    type: 'text',
+    text: {
+      preview_url: false,
+      body: limitText(responsePayload.body || 'Thanks for messaging FeastFlow.', 4096)
+    }
+  };
+};
+
+const sendWhatsAppReply = async (to, responsePayload, options = {}) => {
+  const accessToken = String(process.env.WHATSAPP_TOKEN || '').trim();
+  const phoneNumberId = String(options.phoneNumberId || process.env.WHATSAPP_PHONE_NUMBER_ID || '').trim();
+
+  if (!accessToken || !phoneNumberId) {
+    return {
+      success: false,
+      skipped: true,
+      reason: !accessToken ? 'WHATSAPP_TOKEN is missing' : 'WHATSAPP_PHONE_NUMBER_ID is missing and webhook metadata did not include phone_number_id'
+    };
+  }
+
+  const messagePayload = buildWhatsAppMessagePayload(to, responsePayload, options.contextMessageId);
+  const url = `https://graph.facebook.com/${WHATSAPP_GRAPH_API_VERSION}/${phoneNumberId}/messages`;
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      Authorization: `Bearer ${accessToken}`,
+      'Content-Type': 'application/json'
+    },
+    body: JSON.stringify(messagePayload)
+  });
+  const responseBody = await response.json().catch(() => ({}));
+
+  if (!response.ok) {
+    return {
+      success: false,
+      status: response.status,
+      error: responseBody.error?.message || 'WhatsApp Cloud API send failed',
+      details: responseBody.error
+    };
+  }
+
+  return {
+    success: true,
+    status: response.status,
+    messageId: responseBody.messages?.[0]?.id || null
+  };
 };
 
 // GET /api/whatsapp/webhook - Webhook Verification Handshake
@@ -79,6 +233,7 @@ router.post('/webhook', async (req, res) => {
         for (const change of changes) {
           const value = change.value || {};
           const messages = value.messages || [];
+          const phoneNumberId = value.metadata?.phone_number_id;
 
           for (const msg of messages) {
             const fromPhone = msg.from || msg.phone || '03001234567';
@@ -116,13 +271,42 @@ router.post('/webhook', async (req, res) => {
             const responsePayload = await processWhatsAppConversation(fromPhone, incomingText, payloadData);
 
             // Log outbound message
-            await WhatsAppMessage.create({
+            const outboundMessage = await WhatsAppMessage.create({
               phone: fromPhone,
               direction: 'OUTBOUND',
               message_type: responsePayload.type || 'text',
               body: responsePayload.body,
-              payload: responsePayload
+              payload: responsePayload,
+              status: body.simulated ? 'simulated' : 'pending'
             });
+
+            if (!body.simulated) {
+              try {
+                const sendResult = await sendWhatsAppReply(fromPhone, responsePayload, {
+                  phoneNumberId,
+                  contextMessageId: msg.id
+                });
+                outboundMessage.status = sendResult.success ? 'sent' : 'failed';
+                outboundMessage.wa_message_id = sendResult.messageId || outboundMessage.wa_message_id;
+                outboundMessage.payload = { ...responsePayload, whatsapp_send: sendResult };
+                await outboundMessage.save();
+
+                if (!sendResult.success) {
+                  console.error('WhatsApp reply was not sent:', sendResult);
+                }
+              } catch (sendError) {
+                outboundMessage.status = 'failed';
+                outboundMessage.payload = {
+                  ...responsePayload,
+                  whatsapp_send: {
+                    success: false,
+                    error: sendError.message
+                  }
+                };
+                await outboundMessage.save();
+                console.error('WhatsApp reply send error:', sendError.message);
+              }
+            }
 
             // Emit to connected UI web socket for live view
             const io = req.app.get('io');
