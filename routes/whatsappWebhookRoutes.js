@@ -7,19 +7,47 @@ const MenuCategory = require('../models/MenuCategory');
 const MenuItem = require('../models/MenuItem');
 const WhatsAppSession = require('../models/WhatsAppSession');
 const WhatsAppMessage = require('../models/WhatsAppMessage');
+const Settings = require('../models/Settings');
+
+const DEFAULT_WHATSAPP_VERIFY_TOKEN = Settings.schema.path('whatsapp_verify_token').defaultValue;
+
+const getExpectedVerifyToken = async () => {
+  const envToken = String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
+  if (envToken) {
+    return { token: envToken, source: 'environment' };
+  }
+
+  let settingsToken = '';
+  if (Settings.db.readyState === 1) {
+    try {
+      const settings = await Settings.findOne().select('whatsapp_verify_token').lean();
+      settingsToken = String(settings?.whatsapp_verify_token || '').trim();
+    } catch (error) {
+      console.warn('Unable to read WhatsApp verify token from settings; using default token fallback.');
+    }
+  }
+
+  if (settingsToken) {
+    return { token: settingsToken, source: 'database' };
+  }
+
+  return { token: DEFAULT_WHATSAPP_VERIFY_TOKEN, source: 'default' };
+};
 
 // GET /api/whatsapp/webhook - Webhook Verification Handshake
-router.get('/webhook', (req, res) => {
+router.get('/webhook', async (req, res) => {
   const mode = String(req.query['hub.mode'] || '').trim();
   const receivedToken = String(req.query['hub.verify_token'] || '').trim();
   const challenge = req.query['hub.challenge'];
-  const expectedToken = String(process.env.WHATSAPP_VERIFY_TOKEN || '').trim();
+
+  const { token: expectedToken, source: expectedTokenSource } = await getExpectedVerifyToken();
 
   console.log('Webhook verification attempt:', {
     mode,
     challengePresent: Boolean(challenge),
     receivedTokenPresent: Boolean(receivedToken),
     expectedTokenPresent: Boolean(expectedToken),
+    expectedTokenSource,
     tokenMatches: receivedToken === expectedToken,
     receivedTokenLength: receivedToken.length,
     expectedTokenLength: expectedToken.length
